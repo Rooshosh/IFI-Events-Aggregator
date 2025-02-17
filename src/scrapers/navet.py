@@ -30,28 +30,30 @@ class NavetScraper(BaseScraper):
     def name(self) -> str:
         return "ifinavet.no"
     
-    def _fetch_html(self, url: str) -> str:
+    def _fetch_html(self, url: str, identifier: str = None) -> str:
         """Fetch HTML content with caching support"""
-        # Generate a cache identifier from the URL path
-        parsed = urlparse(url)
-        # Replace all slashes with underscores for consistent cache file names
-        identifier = 'arrangementer' + ('_' + parsed.path.strip('/').replace('/', '_') if parsed.path != '/arrangementer' else '')
+        # Generate a cache identifier from the URL path if not provided
+        if not identifier:
+            parsed = urlparse(url)
+            # Replace all slashes with underscores for consistent cache file names
+            identifier = 'arrangementer' + ('_' + parsed.path.strip('/').replace('/', '_') if parsed.path != '/arrangementer' else '')
         
-        # Try to load from cache first, unless force_live is enabled
+        # Try to load from cache first if caching is enabled
         if self.cache_config.is_cache_enabled(self.name()) and not self.cache_config.should_use_live(self.name()):
             try:
                 cached_content = self.cache_manager.load(self.name(), identifier)
                 if cached_content:
                     logger.debug(f"Loading cached content for {url}")
                     return cached_content
-            except CacheError as e:
-                # If we're not forcing live data, re-raise the exception
-                if not self.cache_config.should_use_live(self.name()):
-                    raise
+            except CacheError:
+                # Cache doesn't exist, we'll fetch live data
+                logger.debug(f"No cache found for {url}, fetching live data")
         
-        # Only fetch fresh content if we're forcing live data
-        if self.cache_config.should_use_live(self.name()):
-            logger.info(f"Fetching fresh content from {url}")
+        # Fetch live data if:
+        # 1. force_live is True, or
+        # 2. Cache doesn't exist/failed to load
+        logger.info(f"Fetching fresh content from {url}")
+        try:
             response = requests.get(url, headers=self.headers)
             response.raise_for_status()
             
@@ -69,8 +71,12 @@ class NavetScraper(BaseScraper):
                 )
             
             return response.text
-        else:
-            raise CacheError(f"No cache found for {url} and live fetching is not enabled. Use --force-live to fetch live data.")
+        except Exception as e:
+            # If we failed to fetch live data and we weren't forcing live,
+            # indicate that cache is needed
+            if not self.cache_config.should_use_live(self.name()):
+                raise CacheError(f"Failed to fetch live data and no cache exists for {url}. Use --force-live to retry.") from e
+            raise
     
     def _parse_date_time(self, date_str: str, time_str: str) -> datetime:
         """Parse date and time strings into a datetime object"""
@@ -135,7 +141,12 @@ class NavetScraper(BaseScraper):
             
         try:
             logger.info(f"Fetching details for event: {event.title}")
-            html = self._fetch_html(event.source_url)
+            # Generate a cache identifier from the event URL path
+            parsed = urlparse(event.source_url)
+            # Replace all slashes with underscores for consistent cache file names
+            identifier = 'event_' + parsed.path.strip('/').replace('/', '_')
+            
+            html = self._fetch_html(event.source_url, identifier)
             soup = BeautifulSoup(html, 'html.parser')
             
             # Find the main container
@@ -401,24 +412,7 @@ class NavetScraper(BaseScraper):
     def get_events(self) -> List[Event]:
         """Get events from ifinavet.no"""
         try:
-            # Fetch the events page
-            html = self._fetch_html(f"{self.base_url}/arrangementer")
-            soup = BeautifulSoup(html, 'html.parser')
-            
-            # Find all event cards
-            event_cards = soup.select('div.event-list-item')
-            logger.info(f"Found {len(event_cards)} event cards")
-            
-            events = []
-            for card in event_cards:
-                try:
-                    event = self._parse_event_card(card)
-                    events.append(event)
-                except Exception as e:
-                    logger.warning(f"Failed to parse event card: {e}")
-                    continue
-            
-            return events
+            return self.scrape_events()
         except Exception as e:
             logger.error(f"Error fetching events from {self.name()}: {e}")
             return [] 
