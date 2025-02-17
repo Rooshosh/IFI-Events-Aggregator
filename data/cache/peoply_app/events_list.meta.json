@@ -1,0 +1,7 @@
+{
+  "url": "https://api.peoply.app/events?afterDate=2025-02-17T18%3A51%3A35.603Z&orderBy=startDate",
+  "content_type": "application/json; charset=utf-8",
+  "status_code": 200,
+  "cached_at": "2025-02-17T19:51:35.785767",
+  "last_accessed": "2025-02-17T19:51:42.266910"
+}

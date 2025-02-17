@@ -1,112 +1,53 @@
+#!/usr/bin/env python3
+
 import logging
-import os
 import sys
-import sqlite3
-from typing import List
+from pathlib import Path
 
-# Add the src directory to the Python path
-sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+# Add src directory to Python path
+sys.path.append(str(Path(__file__).parent.parent))
 
-from src.models.event import Event
-from src.scrapers.manager import SourceManager
-from src.utils.deduplication import check_duplicate_before_insert, DuplicateConfig
+from src.db.database import init_db, get_db
+from src.scrapers.navet import NavetScraper
+from src.scrapers.peoply import PeoplyScraper
+from src.utils.cache import CacheConfig
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-def init_db(db_path: str):
-    """Initialize the database and create the events table if it doesn't exist."""
-    try:
-        with sqlite3.connect(db_path) as conn:
-            c = conn.cursor()
-            c.execute('''
-                CREATE TABLE IF NOT EXISTS events (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    title TEXT NOT NULL,
-                    description TEXT,
-                    start_time DATETIME NOT NULL,
-                    end_time DATETIME NOT NULL,
-                    location TEXT,
-                    source_url TEXT,
-                    source_name TEXT,
-                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-                )
-            ''')
-            conn.commit()
-            logger.info("Database initialized successfully")
-    except Exception as e:
-        logger.error(f"Error initializing database: {e}")
-
-def save_events_to_db(events: List[Event], db_path: str):
-    """Save events to the database, checking for duplicates"""
-    try:
-        config = DuplicateConfig()  # Use default config for duplicate detection
-        
-        with sqlite3.connect(db_path) as conn:
-            c = conn.cursor()
-            new_count = 0
-            duplicate_count = 0
-            
-            for event in events:
-                # Check for duplicates
-                merged_event = check_duplicate_before_insert(event, db_path, config)
-                if merged_event:
-                    # Update existing event with merged data
-                    c.execute('''
-                        UPDATE events
-                        SET title = ?, description = ?, start_time = ?, end_time = ?,
-                            location = ?, source_url = ?, source_name = ?
-                        WHERE id = ?
-                    ''', (
-                        merged_event.title,
-                        merged_event.description,
-                        merged_event.start_time.isoformat(),
-                        merged_event.end_time.isoformat() if merged_event.end_time else None,
-                        merged_event.location,
-                        merged_event.source_url,
-                        merged_event.source_name,
-                        merged_event.id
-                    ))
-                    duplicate_count += 1
-                else:
-                    # Insert new event
-                    c.execute('''
-                        INSERT INTO events (
-                            title, description, start_time, end_time,
-                            location, source_url, source_name
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?)
-                    ''', (
-                        event.title,
-                        event.description,
-                        event.start_time.isoformat(),
-                        event.end_time.isoformat() if event.end_time else None,
-                        event.location,
-                        event.source_url,
-                        event.source_name
-                    ))
-                    new_count += 1
-            
-            conn.commit()
-            logger.info(f"Added {new_count} new events and updated {duplicate_count} existing events")
-    
-    except sqlite3.Error as e:
-        logger.error(f"Database error: {str(e)}")
-    except Exception as e:
-        logger.error(f"Unexpected error while saving events: {str(e)}")
-
-def update_events():
-    """Update events from all enabled sources"""
+def main():
+    """Update events in database from all sources"""
     # Initialize database
-    db_path = os.path.join(os.path.dirname(__file__), '..', 'events.db')
-    init_db(db_path)
+    init_db()
+    db = get_db()
     
-    # Get events from all enabled sources
-    events = SourceManager.get_all_events()
-    if events:
-        save_events_to_db(events, db_path)
-        logger.info(f"Finished processing {len(events)} total events")
-    else:
-        logger.warning("No events found from any source")
+    # Configure caching
+    cache_config = CacheConfig(
+        cache_dir=Path(__file__).parent.parent / 'data' / 'cache',
+        enabled_sources=['peoply.app', 'ifinavet.no']
+    )
+    
+    # Initialize scrapers with cache config
+    scrapers = [
+        PeoplyScraper(cache_config=cache_config),
+        NavetScraper(cache_config=cache_config)
+    ]
+    
+    # Fetch and store events from each source
+    for scraper in scrapers:
+        try:
+            logger.info(f"Fetching events from {scraper.name()}")
+            events = scraper.get_events()
+            logger.info(f"Found {len(events)} events from {scraper.name()}")
+            
+            # Store events in database
+            for event in events:
+                db.merge_event(event)
+            
+            logger.info(f"Successfully updated events from {scraper.name()}")
+        except Exception as e:
+            logger.error(f"Error fetching events from {scraper.name()}: {e}")
+            continue
 
-if __name__ == '__main__':
-    update_events() 
+if __name__ == "__main__":
+    main() 

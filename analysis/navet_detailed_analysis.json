@@ -1,0 +1,96 @@
+{
+  "total_events": 144,
+  "preliminary_events": 11,
+  "event_classes": [],
+  "date_formats": [
+    "tirsdag 01.04",
+    "tirsdag 04.03",
+    "tirsdag 06.05",
+    "tirsdag 08.04",
+    "tirsdag 11.03",
+    "tirsdag 18.02",
+    "tirsdag 25.02",
+    "tirsdag 28.01",
+    "torsdag 03.04",
+    "torsdag 06.02",
+    "torsdag 06.03",
+    "torsdag 10.04",
+    "torsdag 13.02",
+    "torsdag 13.03",
+    "torsdag 20.03",
+    "torsdag 24.04",
+    "torsdag 27.03",
+    "torsdag 30.01"
+  ],
+  "time_formats": [
+    "12:00",
+    "16:15",
+    "16:30",
+    "17:00"
+  ],
+  "companies": [
+    "AkerBP",
+    "BEKK",
+    "Bouvet",
+    "Capgemini",
+    "Computas",
+    "DNB",
+    "DNV",
+    "EY",
+    "Equinor",
+    "Fremtind",
+    "Knowit",
+    "Norconsult",
+    "SopraSteria",
+    "Stingray Marine Solutions",
+    "Telenor Norge AS",
+    "mnemonic",
+    "twoday"
+  ],
+  "event_types": [
+    "Bedriftspresentasjon",
+    "Workshop"
+  ],
+  "url_patterns": [
+    "/arrangementer/2025/var/bedriftspresentasjon-med-bekk/",
+    "/arrangementer/2025/var/bedriftspresentasjon-med-capgemini/",
+    "/arrangementer/2025/var/bedriftspresentasjon-med-dnv-1/",
+    "/arrangementer/2025/var/bedriftspresentasjon-med-dnv/",
+    "/arrangementer/2025/var/bedriftspresentasjon-med-equinor/",
+    "/arrangementer/2025/var/bedriftspresentasjon-med-ey/",
+    "/arrangementer/2025/var/bedriftspresentasjon-med-fremtind/",
+    "/arrangementer/2025/var/bedriftspresentasjon-med-mnemonic/",
+    "/arrangementer/2025/var/bedriftspresentasjon-med-norconsult/",
+    "/arrangementer/2025/var/bedriftspresentasjon-med-sopra-steria/",
+    "/arrangementer/2025/var/bedriftspresentasjon-med-stingray-marine-solutions/",
+    "/arrangementer/2025/var/bedriftspresentasjon-med-twoday/",
+    "/arrangementer/2025/var/stor-bedriftspresentasjon-med-aker-bp/",
+    "/arrangementer/2025/var/stor-bedriftspresentasjon-med-dnb/",
+    "/arrangementer/2025/var/workshop-med-bouvet/",
+    "/arrangementer/2025/var/workshop-med-computas/",
+    "/arrangementer/2025/var/workshop-med-knowit/",
+    "/arrangementer/2025/var/workshop-med-telenor/"
+  ],
+  "sample_events": {
+    "detailed": {
+      "title": "Bedriftspresentasjon\n                                            med Stingray Marine Solutions",
+      "company": "Stingray Marine Solutions",
+      "description": "Bli kjent med Stingray!",
+      "date": "tirsdag 28.01",
+      "time": "16:15",
+      "capacity": 40,
+      "url": "/arrangementer/2025/var/bedriftspresentasjon-med-stingray-marine-solutions/",
+      "is_preliminary": false
+    },
+    "preliminary": {
+      "title": "Bedriftspresentasjon\n                                            med DNV (1)",
+      "company": "DNV",
+      "description": "Mer info kommer",
+      "date": "torsdag 06.03",
+      "time": "16:15",
+      "capacity": 40,
+      "url": "/arrangementer/2025/var/bedriftspresentasjon-med-dnv-1/",
+      "is_preliminary": true
+    }
+  }
+}

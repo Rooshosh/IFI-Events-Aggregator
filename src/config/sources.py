@@ -21,7 +21,7 @@ SOURCES = {
     ),
     'navet': SourceConfig(
         name='ifinavet.no',
-        enabled=False,  # Not implemented yet
+        enabled=True,  # Enabling the scraper
         base_url='https://ifinavet.no',
         scraper_class='src.scrapers.navet.NavetScraper',
         settings={}

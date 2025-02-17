@@ -2,21 +2,27 @@ from datetime import datetime
 from typing import List
 import requests
 import logging
+import json
 from .base import BaseScraper
 from ..models.event import Event
+from ..utils.cache import CacheManager
+from ..config.cache import CacheConfig
+from urllib.parse import urlparse
 
 logger = logging.getLogger(__name__)
 
 class PeoplyScraper(BaseScraper):
-    """Scraper for Peoply.app events using their API"""
+    """Scraper for peoply.app events"""
     
-    def __init__(self):
+    def __init__(self, cache_config: CacheConfig = None):
         self.base_url = "https://api.peoply.app"
         self.headers = {
             'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
             'Accept': 'application/json',
             'Accept-Language': 'en-US,en;q=0.5',
         }
+        self.cache_config = cache_config or CacheConfig()
+        self.cache_manager = CacheManager(self.cache_config.cache_dir)
     
     def name(self) -> str:
         return "peoply.app"
@@ -28,16 +34,43 @@ class PeoplyScraper(BaseScraper):
         encoded_time = time_str.replace(':', '%3A')
         return f"{self.base_url}/events?afterDate={encoded_time}&orderBy=startDate"
     
-    def scrape_events(self) -> List[Event]:
+    def _fetch_json(self, url: str) -> dict:
+        """Fetch JSON content with caching support"""
+        # Use a fixed identifier for caching, ignoring the timestamp
+        identifier = 'events_list'
+        
+        # Try to load from cache first, unless force_live is enabled
+        if self.cache_config.is_cache_enabled(self.name()) and not self.cache_config.should_use_live(self.name()):
+            cached_content = self.cache_manager.load(self.name(), identifier)
+            if cached_content:
+                logger.debug(f"Loading cached content for {url}")
+                return json.loads(cached_content)
+        
+        # Fetch fresh content
+        logger.info(f"Fetching fresh content from {url}")
+        response = requests.get(url, headers=self.headers)
+        response.raise_for_status()
+        
+        # Cache the response if caching is enabled
+        if self.cache_config.is_cache_enabled(self.name()):
+            self.cache_manager.save(
+                self.name(),
+                identifier,
+                json.dumps(response.json(), indent=2),
+                metadata={
+                    'url': url,
+                    'content_type': response.headers.get('content-type'),
+                    'status_code': response.status_code
+                }
+            )
+        
+        return response.json()
+    
+    def get_events(self) -> List[Event]:
         """Get events from peoply.app API"""
         try:
-            url = self._get_api_url()
-            logger.info(f"Fetching events from API: {url}")
-            
-            response = requests.get(url, headers=self.headers)
-            response.raise_for_status()
-            
-            api_events = response.json()
+            # Fetch events from API
+            api_events = self._fetch_json(self._get_api_url())
             logger.info(f"Found {len(api_events)} events from API")
             
             events = []
@@ -88,5 +121,5 @@ class PeoplyScraper(BaseScraper):
             return events
 
         except Exception as e:
-            logger.error(f"Error fetching Peoply events: {e}")
+            logger.error(f"Error fetching events from {self.name()}: {e}")
             return [] 

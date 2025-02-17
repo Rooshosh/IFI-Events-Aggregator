@@ -1,0 +1,75 @@
+{
+  "total_events": 144,
+  "event_classes": [
+    "event-list-item",
+    "event-list-item--inactive",
+    "col-xs-12",
+    "event-list-item-meta",
+    "row",
+    "event-list-item--open"
+  ],
+  "date_formats": [
+    "torsdag 06.02",
+    "torsdag 27.03",
+    "tirsdag 06.05",
+    "torsdag 13.03",
+    "tirsdag 04.03",
+    "torsdag 06.03",
+    "tirsdag 01.04",
+    "torsdag 03.04",
+    "torsdag 13.02",
+    "tirsdag 08.04",
+    "torsdag 10.04",
+    "tirsdag 28.01",
+    "tirsdag 11.03",
+    "torsdag 24.04",
+    "torsdag 30.01",
+    "tirsdag 18.02",
+    "tirsdag 25.02",
+    "torsdag 20.03"
+  ],
+  "time_formats": [
+    "17:00",
+    "16:30",
+    "16:15",
+    "12:00"
+  ],
+  "companies": [
+    "Knowit",
+    "BEKK",
+    "DNV",
+    "SopraSteria",
+    "Telenor Norge AS",
+    "EY",
+    "mnemonic",
+    "DNB",
+    "Computas",
+    "Equinor",
+    "Bouvet",
+    "Norconsult",
+    "AkerBP",
+    "Fremtind",
+    "Capgemini",
+    "Stingray Marine Solutions",
+    "twoday"
+  ],
+  "event_types": [
+    "Workshop",
+    "Bedriftspresentasjon"
+  ],
+  "sample_event": {
+    "title": "Bedriftspresentasjon\n                                            med Stingray Marine Solutions",
+    "company": "Stingray Marine Solutions",
+    "description": "Bli kjent med Stingray!",
+    "meta": {
+      "Åpne plasser": "40",
+      "Tidspunkt": "16:15",
+      "Dato": "tirsdag 28.01"
+    }
+  },
+  "events_by_month": {},
+  "capacity_range": {
+    "min": 30,
+    "max": 80
+  }
+}

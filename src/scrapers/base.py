@@ -3,17 +3,14 @@ from typing import List
 from ..models.event import Event
 
 class BaseScraper(ABC):
-    """Base class for all event scrapers"""
-    
-    @abstractmethod
-    def scrape_events(self) -> List[Event]:
-        """
-        Scrape events from the source.
-        Returns a list of Event objects.
-        """
-        pass
+    """Base class for event scrapers"""
     
     @abstractmethod
     def name(self) -> str:
-        """Return the name of the scraper/event source"""
+        """Get the name of the scraper/source"""
+        pass
+    
+    @abstractmethod
+    def get_events(self) -> List[Event]:
+        """Get events from the source"""
         pass 
