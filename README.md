@@ -4,7 +4,10 @@ A Python application that aggregates and displays events from various UiO IFI (D
 
 ## Features
 
-- Event scraping from multiple sources (currently Peoply.app)
+- Event scraping from multiple sources:
+  - Peoply.app - Events from student organizations
+  - Navet (ifinavet.no) - Company presentations and career events
+- Smart caching system for efficient data retrieval
 - Automatic deduplication of events
 - Web interface to view upcoming events
 - Timezone-aware event handling
@@ -17,15 +20,21 @@ IFI-Events-Aggregator/
 ├── src/                    # Main package code
 │   ├── models/            # Data models
 │   ├── scrapers/          # Event scrapers
-│   └── utils/             # Utility functions
-├── webapp/                 # Web application
+│   ├── utils/             # Utility functions
+│   ├── config/            # Configuration modules
+│   └── db/                # Database handling
+├── webapp/                # Web application
 │   ├── static/            # Static files
 │   ├── templates/         # HTML templates
-│   └── app.py             # Flask application
-├── scripts/                # CLI tools
-│   ├── update_events.py   # Script to update events
-│   └── deduplicate.py     # Script to deduplicate events
-└── tests/                  # Test files
+│   └── app.py            # Flask application
+├── scripts/               # CLI tools
+│   ├── update_events.py  # Update all events
+│   ├── deduplicate.py    # Deduplicate events
+│   └── fetch_cache.py    # Manage source caching
+├── tests/                 # Test files
+│   └── scrapers/         # Scraper tests
+└── tools/                 # Development tools
+    └── analysis/         # Data analysis tools
 ```
 
 ## Setup
@@ -43,6 +52,8 @@ IFI-Events-Aggregator/
 
 ## Usage
 
+### Basic Usage
+
 1. Update events from all sources:
    ```bash
    python scripts/update_events.py
@@ -59,10 +70,28 @@ IFI-Events-Aggregator/
    ```
    Then visit http://127.0.0.1:5000 in your browser.
 
+### Cache Management
+
+The application includes a smart caching system to reduce API calls and web scraping:
+
+1. Fetch and cache data from a specific source:
+   ```bash
+   python scripts/fetch_cache.py navet  # For Navet events
+   python scripts/fetch_cache.py peoply  # For Peoply events
+   ```
+
+2. Force live data fetch (bypass cache):
+   ```bash
+   python scripts/fetch_cache.py navet --force-live
+   ```
+
+Cache configuration can be customized in `src/config/cache.py`.
+
 ## Event Sources
 
 Currently supported:
 - Peoply.app - Events from student organizations at IFI
+- ifinavet.no - Company presentations and career events from Navet
 
 ## Development
 
@@ -71,11 +100,21 @@ The project uses:
 - SQLite for data storage
 - Python's datetime with timezone support
 - Requests for API calls
+- BeautifulSoup4 for web scraping
+- Custom caching system for efficient data retrieval
 
 To add a new event source:
 1. Create a new scraper in `src/scrapers/` that inherits from `BaseScraper`
 2. Implement the required methods
 3. Add the scraper to the list in `scripts/update_events.py`
+4. Add appropriate tests in `tests/scrapers/`
+
+## Testing
+
+Run the test suite:
+```bash
+python -m unittest discover tests
+```
 
 ## Contributing
 
