@@ -20,6 +20,7 @@ def main():
     parser = argparse.ArgumentParser(description='Fetch and cache data from a specific source')
     parser.add_argument('source', choices=['navet', 'peoply'], help='Source to fetch from')
     parser.add_argument('--force-live', action='store_true', help='Force fetching live data (required for initial cache)')
+    parser.add_argument('--debug', action='store_true', help='Show debug information')
     args = parser.parse_args()
     
     # Configure caching
@@ -39,6 +40,12 @@ def main():
         logger.info(f"{'Fetching live data from' if args.force_live else 'Loading cached data for'} {scraper.name()}")
         events = scraper.get_events()
         logger.info(f"Found {len(events)} events from {scraper.name()}")
+        
+        if args.debug:
+            for event in events:
+                logger.info(f"Event: {event.title}")
+                logger.info(f"URL: {event.source_url}")
+                logger.info("-" * 80)
         
         if args.force_live and len(events) > 0:
             logger.info("Data successfully cached")
