@@ -8,7 +8,7 @@ from typing import List
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
 from src.models.event import Event
-from src.scrapers.peoply import PeoplyScraper
+from src.scrapers.manager import SourceManager
 from src.utils.deduplication import check_duplicate_before_insert, DuplicateConfig
 
 logging.basicConfig(level=logging.INFO)
@@ -95,26 +95,18 @@ def save_events_to_db(events: List[Event], db_path: str):
         logger.error(f"Unexpected error while saving events: {str(e)}")
 
 def update_events():
-    """Update events from all sources"""
+    """Update events from all enabled sources"""
     # Initialize database
     db_path = os.path.join(os.path.dirname(__file__), '..', 'events.db')
     init_db(db_path)
     
-    # List of scrapers to use
-    scrapers = [
-        PeoplyScraper(),
-        # Add more scrapers here as they are implemented
-    ]
-    
-    # Scrape events from all sources
-    for scraper in scrapers:
-        logger.info(f"Scraping events from {scraper.name()}")
-        events = scraper.scrape_events()
-        if events:
-            save_events_to_db(events, db_path)
-            logger.info(f"Finished processing {len(events)} events from {scraper.name()}")
-        else:
-            logger.warning(f"No events found from {scraper.name()}")
+    # Get events from all enabled sources
+    events = SourceManager.get_all_events()
+    if events:
+        save_events_to_db(events, db_path)
+        logger.info(f"Finished processing {len(events)} total events")
+    else:
+        logger.warning("No events found from any source")
 
 if __name__ == '__main__':
     update_events() 
