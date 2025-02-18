@@ -2,94 +2,71 @@
 
 from datetime import datetime
 from zoneinfo import ZoneInfo
+import pytest
 
-from tests.base import BaseTestCase
 from src.models.event import Event
 from src.db import db_manager
 
-class TestEventModel(BaseTestCase):
-    """Test cases for the Event model with SQLAlchemy"""
+@pytest.mark.db
+def test_event_creation(db, test_event):
+    """Test that we can create and retrieve an event"""
+    # Add event to database
+    db.add(test_event)
+    db.commit()
     
-    def setUp(self):
-        """Set up test case"""
-        super().setUp()
-        
-        # Create a test event with Oslo timezone
-        oslo_tz = ZoneInfo("Europe/Oslo")
-        self.test_event = Event(
-            title="Test Event",
-            description="Test Description",
-            start_time=datetime.now(oslo_tz),
-            end_time=datetime.now(oslo_tz),
-            location="Test Location",
-            source_url="http://test.com",
-            source_name="test_source"
-        )
+    # Retrieve event
+    stored_event = db.query(Event).first()
     
-    def test_event_creation(self):
-        """Test that we can create and retrieve an event"""
-        with db_manager.session() as db:
-            # Add event to database
-            db.add(self.test_event)
-            db.commit()
-            
-            # Retrieve event
-            stored_event = db.query(Event).first()
-            
-            # Check fields
-            self.assertEqual(stored_event.title, self.test_event.title)
-            self.assertEqual(stored_event.description, self.test_event.description)
-            self.assertEqual(stored_event.location, self.test_event.location)
-            self.assertEqual(stored_event.source_url, self.test_event.source_url)
-            self.assertEqual(stored_event.source_name, self.test_event.source_name)
-    
-    def test_event_update(self):
-        """Test that we can update an event"""
-        with db_manager.session() as db:
-            # Add event to database
-            db.add(self.test_event)
-            db.commit()
-            
-            # Update event
-            self.test_event.title = "Updated Title"
-            db.commit()
-            
-            # Retrieve event
-            stored_event = db.query(Event).first()
-            self.assertEqual(stored_event.title, "Updated Title")
-    
-    def test_event_deletion(self):
-        """Test that we can delete an event"""
-        with db_manager.session() as db:
-            # Add event to database
-            db.add(self.test_event)
-            db.commit()
-            
-            # Delete event
-            db.delete(self.test_event)
-            db.commit()
-            
-            # Check that event is gone
-            stored_event = db.query(Event).first()
-            self.assertIsNone(stored_event)
-    
-    def test_timezone_handling(self):
-        """Test that times are stored correctly in Oslo time"""
-        # Create event with UTC timezone (should be converted to Oslo)
-        utc_tz = ZoneInfo("UTC")
-        utc_time = datetime.now(utc_tz)
-        oslo_time = utc_time.astimezone(ZoneInfo("Europe/Oslo"))
-        
-        with db_manager.session() as db:
-            self.test_event.start_time = utc_time
-            db.add(self.test_event)
-            db.commit()
-            
-            # Retrieve event and verify the time matches Oslo time
-            # (ignoring timezone info since SQLite doesn't store it)
-            stored_event = db.query(Event).first()
-            self.assertEqual(stored_event.start_time.replace(tzinfo=None), 
-                           oslo_time.replace(tzinfo=None))
+    # Check fields
+    assert stored_event.title == test_event.title
+    assert stored_event.description == test_event.description
+    assert stored_event.location == test_event.location
+    assert stored_event.source_url == test_event.source_url
+    assert stored_event.source_name == test_event.source_name
 
-if __name__ == '__main__':
-    unittest.main() 
+@pytest.mark.db
+def test_event_update(db, test_event):
+    """Test that we can update an event"""
+    # Add event to database
+    db.add(test_event)
+    db.commit()
+    
+    # Update event
+    test_event.title = "Updated Title"
+    db.commit()
+    
+    # Retrieve event
+    stored_event = db.query(Event).first()
+    assert stored_event.title == "Updated Title"
+
+@pytest.mark.db
+def test_event_deletion(db, test_event):
+    """Test that we can delete an event"""
+    # Add event to database
+    db.add(test_event)
+    db.commit()
+    
+    # Delete event
+    db.delete(test_event)
+    db.commit()
+    
+    # Check that event is gone
+    stored_event = db.query(Event).first()
+    assert stored_event is None
+
+@pytest.mark.db
+def test_timezone_handling(db, test_event):
+    """Test that times are stored correctly in Oslo time"""
+    # Create event with UTC timezone (should be converted to Oslo)
+    utc_tz = ZoneInfo("UTC")
+    utc_time = datetime.now(utc_tz)
+    oslo_time = utc_time.astimezone(ZoneInfo("Europe/Oslo"))
+    
+    test_event.start_time = utc_time
+    db.add(test_event)
+    db.commit()
+    
+    # Retrieve event and verify the time matches Oslo time
+    # (ignoring timezone info since SQLite doesn't store it)
+    stored_event = db.query(Event).first()
+    assert stored_event.start_time.replace(tzinfo=None) == oslo_time.replace(tzinfo=None) 
