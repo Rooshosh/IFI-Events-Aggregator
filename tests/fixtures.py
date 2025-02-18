@@ -5,7 +5,7 @@ from zoneinfo import ZoneInfo
 from typing import List
 
 from src.models.event import Event
-from src.db.base import get_db
+from src.db import db_manager
 
 def create_test_event(**overrides) -> Event:
     """Create a single test event with default values that can be overridden."""
@@ -25,7 +25,6 @@ def create_test_event(**overrides) -> Event:
 
 def create_sample_events() -> List[Event]:
     """Create a set of realistic test events."""
-    db = get_db()
     oslo_tz = ZoneInfo("Europe/Oslo")
     now = datetime.now(oslo_tz)
     
@@ -59,15 +58,15 @@ def create_sample_events() -> List[Event]:
         )
     ]
     
-    for event in events:
-        db.add(event)
-    db.commit()
+    with db_manager.session() as db:
+        for event in events:
+            db.add(event)
+        db.commit()
     
     return events
 
 def create_duplicate_events() -> List[Event]:
     """Create events that are potential duplicates for testing deduplication."""
-    db = get_db()
     oslo_tz = ZoneInfo("Europe/Oslo")
     now = datetime.now(oslo_tz)
     
@@ -77,7 +76,6 @@ def create_duplicate_events() -> List[Event]:
         start_time=now,
         source_name="source1"
     )
-    db.add(original)
     
     # Create similar events with slight differences
     duplicates = [
@@ -95,8 +93,10 @@ def create_duplicate_events() -> List[Event]:
         )
     ]
     
-    for event in duplicates:
-        db.add(event)
-    db.commit()
+    with db_manager.session() as db:
+        db.add(original)
+        for event in duplicates:
+            db.add(event)
+        db.commit()
     
     return [original] + duplicates 
