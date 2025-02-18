@@ -1,3 +1,5 @@
+"""Scraper for ifinavet.no events"""
+
 from datetime import datetime, timedelta
 import logging
 from typing import List, Optional
@@ -15,7 +17,32 @@ from ..utils.cache import CacheConfig, CacheManager, CacheError
 logger = logging.getLogger(__name__)
 
 class NavetScraper(BaseScraper):
-    """Scraper for ifinavet.no events"""
+    """
+    Scraper for ifinavet.no events.
+    
+    This scraper was developed based on detailed analysis of the Navet website structure.
+    The analysis tools and findings are stored in tools/analysis/ifinavet_no/:
+    
+    Analysis Scripts:
+    - navet_structure_analysis.py: Analyzes events listing page structure
+    - navet_page_analysis.py: Analyzes individual event page structures
+    - navet_event_analysis.py: Analyzes event data formats
+    
+    Analysis Results:
+    - navet_analysis_results.json: Structure analysis results
+    - navet_detailed_analysis.json: Event data format findings
+    
+    The analysis helped:
+    1. Understand the HTML structure of event pages
+    2. Identify patterns in event data presentation
+    3. Determine optimal scraping approach
+    4. Document website structure for future updates
+    
+    Note: If the website structure changes, refer to the analysis tools to:
+    - Update the scraper
+    - Understand scraping decisions
+    - Analyze new features
+    """
     
     def __init__(self, cache_config: CacheConfig = None):
         self.base_url = "https://ifinavet.no"

@@ -11,150 +11,66 @@ A Python application that aggregates and displays events from various UiO IFI (D
 - Automatic deduplication of events
 - Web interface to view upcoming events
 - Timezone-aware event handling
-- Smart event merging
 
-## Project Structure
+## Components
 
-```
-IFI-Events-Aggregator/
-├── src/                    # Main package code
-│   ├── models/            # Data models
-│   ├── scrapers/          # Event scrapers
-│   ├── utils/             # Utility functions
-│   ├── config/            # Configuration modules
-│   └── db/                # Database handling
-├── webapp/                # Web application
-│   ├── static/            # Static files
-│   ├── templates/         # HTML templates
-│   └── app.py            # Flask application
-├── scripts/               # CLI tools
-│   ├── update_events.py  # Update all events
-│   ├── deduplicate.py    # Deduplicate events
-│   └── fetch_cache.py    # Manage source caching
-├── tests/                 # Test files
-│   └── scrapers/         # Scraper tests
-└── tools/                 # Development tools
-    └── analysis/         # Data analysis tools
-```
+The project consists of several key components:
 
-## Setup
+- **Event Scrapers**: Modules for fetching events from different sources (using BeautifulSoup4 and Requests)
+- **Web Interface**: Flask-based web application for viewing events
+- **CLI Tools**: Command-line tools for managing events and system maintenance
+- **Storage**: SQLite-based storage with smart event merging and caching system
+- **Test Suite**: Comprehensive tests for all components
 
-1. Create and activate a virtual environment:
+## Quick Start
+
+1. Set up environment:
    ```bash
    python3 -m venv venv
    source venv/bin/activate  # On Windows: venv\Scripts\activate
-   ```
-
-2. Install dependencies:
-   ```bash
    pip install -r requirements.txt
    ```
 
-## Development vs Production
-
-### Development Mode
-During development, run the application with debug mode enabled:
-```bash
-FLASK_ENV=development python run.py
-```
-
-This enables:
-- Detailed error pages with tracebacks
-- Interactive debugger
-- Automatic code reloading
-- Test routes (e.g., /test-500 for error page testing)
-
-### Production Deployment
-For production deployment:
-
-1. Disable debug mode:
+2. Run in development mode:
    ```bash
-   python run.py  # or FLASK_ENV=production python run.py
+   FLASK_ENV=development python run.py
    ```
 
-2. Use a production WSGI server:
+3. Run tests:
    ```bash
-   pip install gunicorn  # Install Gunicorn
-   gunicorn -w 4 'src.web:app'  # Run with 4 worker processes
+   python -m unittest discover tests
    ```
 
-3. Security considerations:
-   - Remove or disable test routes (like test-500)
-   - Configure proper logging instead of showing errors to users
-   - Set appropriate file permissions
-   - Use HTTPS
-   - Set secure headers
-   - Configure proper user authentication
+## Documentation
 
-4. Environment variables:
-   - Set `FLASK_ENV=production`
-   - Configure any sensitive data through environment variables
-
-## Usage
-
-### Basic Usage
-
-1. Update events from all sources:
-   ```bash
-   python scripts/update_events.py
-   ```
-
-2. Run deduplication if needed:
-   ```bash
-   python scripts/deduplicate.py
-   ```
-
-3. Start the web application:
-   ```bash
-   python webapp/app.py
-   ```
-   Then visit http://127.0.0.1:5000 in your browser.
-
-### Cache Management
-
-The application includes a smart caching system to reduce API calls and web scraping:
-
-1. Fetch and cache data from a specific source:
-   ```bash
-   python scripts/fetch_cache.py navet  # For Navet events
-   python scripts/fetch_cache.py peoply  # For Peoply events
-   ```
-
-2. Force live data fetch (bypass cache):
-   ```bash
-   python scripts/fetch_cache.py navet --force-live
-   ```
-
-Cache configuration can be customized in `src/config/cache.py`.
-
-## Event Sources
-
-Currently supported:
-- Peoply.app - Events from student organizations at IFI
-- ifinavet.no - Company presentations and career events from Navet
+- Each Python module contains detailed documentation in its docstrings
+- For CLI tools, use the `--help` flag (e.g., `python scripts/events.py --help`)
+- The web interface includes inline help and tooltips
 
 ## Development
 
-The project uses:
-- Flask for the web interface
-- SQLite for data storage
-- Python's datetime with timezone support
-- Requests for API calls
-- BeautifulSoup4 for web scraping
-- Custom caching system for efficient data retrieval
+### Adding a New Event Source
 
-To add a new event source:
 1. Create a new scraper in `src/scrapers/` that inherits from `BaseScraper`
 2. Implement the required methods
-3. Add the scraper to the list in `scripts/update_events.py`
-4. Add appropriate tests in `tests/scrapers/`
+3. Add the scraper to the list in `scripts/events.py`
+4. Add appropriate tests
 
-## Testing
+### Production Deployment
 
-Run the test suite:
-```bash
-python -m unittest discover tests
-```
+1. Use a production WSGI server:
+   ```bash
+   pip install gunicorn
+   FLASK_ENV=production gunicorn -w 4 'src.web:app'
+   ```
+
+2. Security checklist:
+   - Configure proper logging
+   - Set appropriate file permissions
+   - Use HTTPS
+   - Set secure headers
+   - Configure user authentication if needed
+   - Set environment variables for sensitive data
 
 ## Contributing
 
