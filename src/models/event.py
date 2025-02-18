@@ -7,7 +7,7 @@ from sqlalchemy import Column, Integer, String, Text, DateTime, event
 from sqlalchemy.orm import validates
 from sqlalchemy import event as sa_event
 
-from ..db.base import Base
+from ..db.model import Base
 
 def ensure_timezone(dt: datetime) -> datetime:
     """Ensure datetime is in Europe/Oslo timezone"""
