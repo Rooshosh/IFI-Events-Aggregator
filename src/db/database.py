@@ -39,6 +39,8 @@ def init_db():
                 spots_left INTEGER,
                 source_url TEXT,
                 source_name TEXT,
+                registration_opens DATETIME,
+                registration_url TEXT,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                 updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
             )
@@ -76,6 +78,8 @@ class Database:
                     capacity = ?,
                     spots_left = ?,
                     source_url = ?,
+                    registration_opens = ?,
+                    registration_url = ?,
                     updated_at = ?
                 WHERE id = ?
             ''', (
@@ -86,6 +90,8 @@ class Database:
                 event.capacity,
                 event.spots_left,
                 event.source_url,
+                event.registration_opens.isoformat() if event.registration_opens else None,
+                event.registration_url,
                 datetime.now().isoformat(),
                 existing[0]
             ))
@@ -96,8 +102,9 @@ class Database:
                 INSERT INTO events (
                     title, description, start_time, end_time,
                     location, food, capacity, spots_left,
-                    source_url, source_name
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    source_url, source_name, registration_opens,
+                    registration_url
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''', (
                 event.title,
                 event.description,
@@ -108,7 +115,9 @@ class Database:
                 event.capacity,
                 event.spots_left,
                 event.source_url,
-                event.source_name
+                event.source_name,
+                event.registration_opens.isoformat() if event.registration_opens else None,
+                event.registration_url
             ))
             logger.debug(f"Inserted new event: {event.title}")
         

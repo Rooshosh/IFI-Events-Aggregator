@@ -33,11 +33,13 @@ import sys
 from pathlib import Path
 import argparse
 from typing import List, Optional
+import sqlite3
+from datetime import datetime
 
 # Add src directory to Python path
 sys.path.append(str(Path(__file__).parent.parent))
 
-from src.db.database import init_db, get_db
+from src.db.database import init_db, get_db, get_db_path
 from src.scrapers.navet import NavetScraper
 from src.scrapers.peoply import PeoplyScraper
 from src.utils.cache import CacheConfig
@@ -102,19 +104,10 @@ def print_events_info(events: List[Event], detailed: bool = False):
     
     if detailed:
         for event in events:
-            logger.info("-" * 80)
-            logger.info(f"Title: {event.title}")
-            logger.info(f"Start: {event.start_time}")
-            logger.info(f"End: {event.end_time}")
-            logger.info(f"Location: {event.location}")
-            logger.info(f"Source: {event.source_name}")
-            logger.info(f"URL: {event.source_url}")
-            if event.capacity is not None:
-                logger.info(f"Capacity: {event.capacity}")
-            if event.spots_left is not None:
-                logger.info(f"Spots Left: {event.spots_left}")
-            if event.food:
-                logger.info(f"Food: {event.food}")
+            logger.info(event.to_detailed_string())
+    else:
+        for event in events:
+            logger.info(event.to_summary_string())
 
 def fetch_events(
     source: Optional[str] = None,
@@ -201,6 +194,38 @@ def fetch_events(
     
     return all_events
 
+def get_event_by_id(event_id: int) -> Optional[Event]:
+    """Get a single event from the database by ID"""
+    with sqlite3.connect(get_db_path()) as conn:
+        c = conn.cursor()
+        c.execute('''
+            SELECT id, title, description, start_time, end_time,
+                   location, source_url, source_name, created_at,
+                   food, capacity, spots_left, registration_opens,
+                   registration_url
+            FROM events WHERE id = ?
+        ''', (event_id,))
+        row = c.fetchone()
+        if not row:
+            return None
+        
+        return Event(
+            id=row[0],
+            title=row[1],
+            description=row[2],
+            start_time=datetime.fromisoformat(row[3]),
+            end_time=datetime.fromisoformat(row[4]) if row[4] else None,
+            location=row[5],
+            source_url=row[6],
+            source_name=row[7],
+            created_at=datetime.fromisoformat(row[8]) if row[8] else None,
+            food=row[9],
+            capacity=row[10],
+            spots_left=row[11],
+            registration_opens=datetime.fromisoformat(row[12]) if row[12] else None,
+            registration_url=row[13]
+        )
+
 def main():
     """Main CLI interface for the events management tool."""
     parser = argparse.ArgumentParser(
@@ -219,13 +244,23 @@ Examples:
   
   # View detailed event information
   %(prog)s fetch --detailed
+  
+  # View a single event in both summary and detailed format
+  %(prog)s show 1
         """
     )
     
     parser.add_argument(
         'command',
-        choices=['fetch'],
+        choices=['fetch', 'show'],
         help='Command to execute'
+    )
+    
+    parser.add_argument(
+        'event_id',
+        type=int,
+        nargs='?',
+        help='Event ID to show (required for show command)'
     )
     
     parser.add_argument(
@@ -260,11 +295,20 @@ Examples:
     
     args = parser.parse_args()
     
-    # Initialize database if we're going to use it
-    if not args.no_store:
-        init_db()
-    
-    if args.command == 'fetch':
+    if args.command == 'show':
+        if args.event_id is None:
+            parser.error("The show command requires an event ID")
+        event = get_event_by_id(args.event_id)
+        if event:
+            logger.info("Summary view:")
+            logger.info(event.to_summary_string())
+            logger.info("\nDetailed view:")
+            logger.info(event.to_detailed_string())
+        else:
+            logger.error(f"No event found with ID {args.event_id}")
+    elif args.command == 'fetch':
+        if not args.no_store:
+            init_db()
         fetch_events(
             source=args.source,
             use_cache=not args.live,

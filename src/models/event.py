@@ -73,4 +73,51 @@ class Event:
             'registration_opens': self.registration_opens,
             'registration_url': self.registration_url,
             'food': self.food
-        } 
+        }
+
+    def __str__(self) -> str:
+        """Default string representation with basic event information"""
+        return f"{self.title} ({self.start_time.strftime('%Y-%m-%d %H:%M')})"
+    
+    def to_detailed_string(self) -> str:
+        """Detailed string representation with all available event information"""
+        lines = [
+            "-" * 80,
+            f"Title: {self.title}",
+            f"Start: {self.start_time.strftime('%Y-%m-%d %H:%M')}",
+            f"End: {self.end_time.strftime('%Y-%m-%d %H:%M') if self.end_time else 'Not specified'}",
+            f"Location: {self.location or 'Not specified'}",
+            f"Source: {self.source_name or 'Unknown'}",
+            f"URL: {self.source_url or 'Not available'}"
+        ]
+        
+        # Add optional information if available
+        if self.capacity is not None:
+            lines.append(f"Capacity: {self.capacity}")
+        if self.spots_left is not None:
+            lines.append(f"Spots Left: {self.spots_left}")
+        if self.food:
+            lines.append(f"Food: {self.food}")
+        if self.registration_opens:
+            lines.append(f"Registration Opens: {self.registration_opens.strftime('%Y-%m-%d %H:%M')}")
+        if self.registration_url and self.registration_url != self.source_url:
+            lines.append(f"Registration URL: {self.registration_url}")
+        
+        # Add description at the end
+        if self.description:
+            lines.extend(["", "Description:", self.description])
+        
+        return "\n".join(lines)
+    
+    def to_summary_string(self) -> str:
+        """Summary string representation with key event information"""
+        summary = [f"{self.title} - {self.start_time.strftime('%Y-%m-%d %H:%M')}"]
+        
+        if self.location:
+            summary.append(f"at {self.location}")
+        if self.capacity is not None and self.spots_left is not None:
+            summary.append(f"({self.spots_left}/{self.capacity} spots available)")
+        elif self.capacity is not None:
+            summary.append(f"(Capacity: {self.capacity})")
+        
+        return " ".join(summary) 

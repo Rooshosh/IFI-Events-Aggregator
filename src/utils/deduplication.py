@@ -97,6 +97,21 @@ def merge_events(event1: Event, event2: Event) -> Event:
     source_urls = list(filter(None, [event1.source_url, event2.source_url]))
     source_names = list(filter(None, [event1.source_name, event2.source_name]))
     
+    # Take the earliest registration opening time
+    registration_opens = None
+    if event1.registration_opens and event2.registration_opens:
+        registration_opens = min(event1.registration_opens, event2.registration_opens)
+    else:
+        registration_opens = event1.registration_opens or event2.registration_opens
+    
+    # Take the first registration URL
+    registration_urls = list(filter(None, [event1.registration_url, event2.registration_url]))
+    
+    # Take the most complete capacity information
+    capacity = event1.capacity or event2.capacity
+    spots_left = event1.spots_left or event2.spots_left
+    food = event1.food or event2.food
+    
     return Event(
         id=id_to_keep,
         title=event1.title,  # Keep the title from the first event
@@ -106,7 +121,12 @@ def merge_events(event1: Event, event2: Event) -> Event:
         location=location,
         source_url=source_urls[0] if source_urls else None,  # Keep first source URL
         source_name=', '.join(source_names) if len(source_names) > 1 else (source_names[0] if source_names else None),
-        created_at=min(event1.created_at, event2.created_at) if (event1.created_at and event2.created_at) else (event1.created_at or event2.created_at)
+        created_at=min(event1.created_at, event2.created_at) if (event1.created_at and event2.created_at) else (event1.created_at or event2.created_at),
+        capacity=capacity,
+        spots_left=spots_left,
+        food=food,
+        registration_opens=registration_opens,
+        registration_url=registration_urls[0] if registration_urls else None
     )
 
 def deduplicate_database(db_path: str, config: DuplicateConfig = DuplicateConfig()) -> Tuple[int, List[Event]]:
@@ -120,7 +140,9 @@ def deduplicate_database(db_path: str, config: DuplicateConfig = DuplicateConfig
         # Get all events
         c.execute('''
             SELECT id, title, description, start_time, end_time, 
-                   location, source_url, source_name, created_at
+                   location, source_url, source_name, created_at,
+                   food, capacity, spots_left, registration_opens,
+                   registration_url
             FROM events
             ORDER BY created_at ASC
         ''')
@@ -138,7 +160,12 @@ def deduplicate_database(db_path: str, config: DuplicateConfig = DuplicateConfig
                     location=row[5],
                     source_url=row[6],
                     source_name=row[7],
-                    created_at=datetime.fromisoformat(row[8]) if row[8] else None
+                    created_at=datetime.fromisoformat(row[8]) if row[8] else None,
+                    food=row[9],
+                    capacity=row[10],
+                    spots_left=row[11],
+                    registration_opens=datetime.fromisoformat(row[12]) if row[12] else None,
+                    registration_url=row[13]
                 ))
             except Exception as e:
                 logger.warning(f"Failed to parse event {row[0]}: {e}")
@@ -174,8 +201,10 @@ def deduplicate_database(db_path: str, config: DuplicateConfig = DuplicateConfig
             c.execute('''
                 INSERT INTO events (
                     id, title, description, start_time, end_time,
-                    location, source_url, source_name, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    location, source_url, source_name, created_at,
+                    food, capacity, spots_left, registration_opens,
+                    registration_url
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''', (
                 event.id,
                 event.title,
@@ -185,7 +214,12 @@ def deduplicate_database(db_path: str, config: DuplicateConfig = DuplicateConfig
                 event.location,
                 event.source_url,
                 event.source_name,
-                event.created_at.isoformat() if event.created_at else None
+                event.created_at.isoformat() if event.created_at else None,
+                event.food,
+                event.capacity,
+                event.spots_left,
+                event.registration_opens.isoformat() if event.registration_opens else None,
+                event.registration_url
             ))
         
         conn.commit()
@@ -207,7 +241,9 @@ def check_duplicate_before_insert(new_event: Event, db_path: str, config: Duplic
         
         c.execute('''
             SELECT id, title, description, start_time, end_time,
-                   location, source_url, source_name, created_at
+                   location, source_url, source_name, created_at,
+                   food, capacity, spots_left, registration_opens,
+                   registration_url
             FROM events
             WHERE start_time BETWEEN ? AND ?
         ''', (start_time_min, start_time_max))
@@ -223,7 +259,12 @@ def check_duplicate_before_insert(new_event: Event, db_path: str, config: Duplic
                     location=row[5],
                     source_url=row[6],
                     source_name=row[7],
-                    created_at=datetime.fromisoformat(row[8]) if row[8] else None
+                    created_at=datetime.fromisoformat(row[8]) if row[8] else None,
+                    food=row[9],
+                    capacity=row[10],
+                    spots_left=row[11],
+                    registration_opens=datetime.fromisoformat(row[12]) if row[12] else None,
+                    registration_url=row[13]
                 )
                 
                 if are_events_duplicate(new_event, existing_event, config):
