@@ -45,6 +45,7 @@ from src.scrapers.navet import NavetScraper
 from src.scrapers.peoply import PeoplyScraper
 from src.utils.cache import CacheConfig
 from src.models.event import Event
+from src.utils.timezone import now_oslo
 
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -228,7 +229,7 @@ def get_next_event() -> Optional[Event]:
     """Get the next upcoming event from the current date/time"""
     db = get_db()
     try:
-        now = datetime.now(ZoneInfo("UTC"))
+        now = now_oslo()
         return db.query(Event).filter(Event.start_time > now).order_by(Event.start_time.asc()).first()
     finally:
         close_db()

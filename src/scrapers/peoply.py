@@ -8,6 +8,8 @@ from ..models.event import Event
 from ..utils.cache import CacheManager, CacheConfig, CacheError
 from ..utils.decorators import cached_request, cached_method
 from urllib.parse import urlparse
+from zoneinfo import ZoneInfo
+from ..utils.timezone import now_oslo
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +31,8 @@ class PeoplyScraper(BaseScraper):
     
     def _get_api_url(self) -> str:
         """Generate the URL for peoply.app events API with the current date"""
-        current_time = datetime.utcnow()
+        # Convert Oslo time to UTC for the API
+        current_time = now_oslo().astimezone(ZoneInfo("UTC"))
         time_str = current_time.strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + 'Z'
         encoded_time = time_str.replace(':', '%3A')
         return f"{self.base_url}/events?afterDate={encoded_time}&orderBy=startDate"

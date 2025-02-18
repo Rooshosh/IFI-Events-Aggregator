@@ -2,21 +2,12 @@
 
 from datetime import datetime
 from typing import Optional, Dict, Any
-from zoneinfo import ZoneInfo
 from sqlalchemy import Column, Integer, String, Text, DateTime, event
 from sqlalchemy.orm import validates
 from sqlalchemy import event as sa_event
 
 from ..db.model import Base
-
-def ensure_timezone(dt: datetime) -> datetime:
-    """Ensure datetime is in Europe/Oslo timezone"""
-    if dt is None:
-        return None
-    oslo_tz = ZoneInfo("Europe/Oslo")
-    if dt.tzinfo is None:
-        return dt.replace(tzinfo=oslo_tz)
-    return dt.astimezone(oslo_tz)
+from ..utils.timezone import ensure_oslo_timezone, DEFAULT_TIMEZONE, now_oslo
 
 class Event(Base):
     """
@@ -66,7 +57,7 @@ class Event(Base):
     location = Column(String)
     source_url = Column(String)
     source_name = Column(String)
-    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(ZoneInfo("Europe/Oslo")))
+    created_at = Column(DateTime(timezone=True), default=now_oslo)
     capacity = Column(Integer)
     spots_left = Column(Integer)
     registration_opens = Column(DateTime(timezone=True))
@@ -76,21 +67,16 @@ class Event(Base):
     def __init__(self, **kwargs):
         """Initialize an Event with the given attributes."""
         # Ensure timezone-aware datetimes and convert to Oslo time
-        if 'start_time' in kwargs:
-            kwargs['start_time'] = ensure_timezone(kwargs['start_time'])
-        if 'end_time' in kwargs:
-            kwargs['end_time'] = ensure_timezone(kwargs['end_time'])
-        if 'registration_opens' in kwargs:
-            kwargs['registration_opens'] = ensure_timezone(kwargs['registration_opens'])
-        if 'created_at' in kwargs:
-            kwargs['created_at'] = ensure_timezone(kwargs['created_at'])
+        for field in ['start_time', 'end_time', 'registration_opens', 'created_at']:
+            if field in kwargs:
+                kwargs[field] = ensure_oslo_timezone(kwargs[field])
         
         super().__init__(**kwargs)
     
     @validates('start_time', 'end_time', 'registration_opens', 'created_at')
     def validate_datetime(self, key, value):
         """Ensure all datetime fields are in Europe/Oslo timezone."""
-        return ensure_timezone(value)
+        return ensure_oslo_timezone(value)
     
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'Event':
@@ -182,24 +168,14 @@ class Event(Base):
 @sa_event.listens_for(Event, 'load')
 def receive_load(target, context):
     """Ensure timezone information when loading from database"""
-    if target.start_time:
-        target.start_time = ensure_timezone(target.start_time)
-    if target.end_time:
-        target.end_time = ensure_timezone(target.end_time)
-    if target.registration_opens:
-        target.registration_opens = ensure_timezone(target.registration_opens)
-    if target.created_at:
-        target.created_at = ensure_timezone(target.created_at)
+    for field in ['start_time', 'end_time', 'registration_opens', 'created_at']:
+        if hasattr(target, field) and getattr(target, field) is not None:
+            setattr(target, field, ensure_oslo_timezone(getattr(target, field)))
 
 @sa_event.listens_for(Event, 'before_insert')
 @sa_event.listens_for(Event, 'before_update')
 def receive_before_save(mapper, connection, target):
     """Ensure timezone information before saving to database"""
-    if target.start_time:
-        target.start_time = ensure_timezone(target.start_time)
-    if target.end_time:
-        target.end_time = ensure_timezone(target.end_time)
-    if target.registration_opens:
-        target.registration_opens = ensure_timezone(target.registration_opens)
-    if target.created_at:
-        target.created_at = ensure_timezone(target.created_at) 
+    for field in ['start_time', 'end_time', 'registration_opens', 'created_at']:
+        if hasattr(target, field) and getattr(target, field) is not None:
+            setattr(target, field, ensure_oslo_timezone(getattr(target, field))) 

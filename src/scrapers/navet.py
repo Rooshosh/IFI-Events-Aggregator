@@ -14,6 +14,7 @@ from .base import BaseScraper
 from ..models.event import Event
 from ..utils.cache import CacheConfig, CacheManager, CacheError
 from ..utils.decorators import cached_request, cached_method
+from ..utils.timezone import ensure_oslo_timezone
 
 logger = logging.getLogger(__name__)
 
@@ -88,7 +89,8 @@ class NavetScraper(BaseScraper):
             
             # Construct datetime (using current year as events are typically not more than a year in advance)
             current_year = datetime.now().year
-            return datetime(current_year, month, day, hour, minute, tzinfo=ZoneInfo("Europe/Oslo"))
+            naive_dt = datetime(current_year, month, day, hour, minute)
+            return ensure_oslo_timezone(naive_dt)
             
         except Exception as e:
             logger.error(f"Error parsing date/time: {date_str} {time_str} - {str(e)}")
