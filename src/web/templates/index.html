@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row">
+    {% for event in events %}
+    <div class="col-md-6 mb-4">
+        <div class="card h-100">
+            <div class="card-body">
+                <h5 class="card-title">{{ event.title }}</h5>
+                <h6 class="card-subtitle mb-2 text-muted">
+                    {{ event.start_time.strftime('%Y-%m-%d %H:%M') }}
+                    {% if event.end_time %}
+                        - {{ event.end_time.strftime('%H:%M') }}
+                    {% endif %}
+                </h6>
+                {% if event.location %}
+                    <p class="card-text"><small class="text-muted">📍 {{ event.location }}</small></p>
+                {% endif %}
+                <p class="card-text">{{ event.description[:200] }}{% if event.description|length > 200 %}...{% endif %}</p>
+                {% if event.source_url %}
+                    <a href="{{ event.source_url }}" class="btn btn-primary" target="_blank">More Info</a>
+                {% endif %}
+                <small class="text-muted d-block mt-2">Source: {{ event.source_name }}</small>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% endblock %} 

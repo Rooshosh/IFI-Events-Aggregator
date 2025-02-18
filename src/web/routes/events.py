@@ -1,22 +1,15 @@
-import os
-import sys
-import sqlite3
 from datetime import datetime
-from flask import Flask, render_template
+import sqlite3
+from flask import Blueprint, render_template
+from ...models.event import Event
+from ...db.database import get_db_path
 
-# Add the src directory to the Python path
-sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+# Create the blueprint
+events_bp = Blueprint('events', __name__)
 
-from src.models.event import Event
-
-app = Flask(__name__)
-
-def get_db_path():
-    """Get the path to the database file"""
-    return os.path.join(os.path.dirname(__file__), '..', 'events.db')
-
-@app.route('/')
+@events_bp.route('/')
 def index():
+    """Main page showing all upcoming events"""
     with sqlite3.connect(get_db_path()) as conn:
         c = conn.cursor()
         c.execute('''
@@ -40,7 +33,4 @@ def index():
             )
             for e in events
         ]
-        return render_template('index.html', events=events)
-
-if __name__ == '__main__':
-    app.run(debug=True) 
+        return render_template('index.html', events=events) 

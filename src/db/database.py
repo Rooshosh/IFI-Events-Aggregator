@@ -11,9 +11,13 @@ logger = logging.getLogger(__name__)
 # Database connection
 DB_PATH = Path(__file__).parent.parent.parent / 'events.db'
 
+def get_db_path() -> str:
+    """Get the path to the database file"""
+    return str(DB_PATH)
+
 def get_db_connection() -> sqlite3.Connection:
     """Get a database connection"""
-    return sqlite3.connect(str(DB_PATH))
+    return sqlite3.connect(get_db_path())
 
 def init_db():
     """Initialize the database and create necessary tables"""
