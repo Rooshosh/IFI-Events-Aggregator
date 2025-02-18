@@ -233,6 +233,19 @@ def get_next_event() -> Optional[Event]:
     finally:
         close_db()
 
+def clear_database(quiet: bool = False) -> None:
+    """Clear all events from the database."""
+    init_db()  # Ensure database is initialized
+    db = get_db()
+    try:
+        # Delete all events
+        count = db.query(Event).delete()
+        db.commit()
+        if not quiet:
+            logger.info(f"Cleared {count} events from database")
+    finally:
+        close_db()
+
 def main():
     """Main CLI interface for the events management tool."""
     parser = argparse.ArgumentParser(
@@ -260,12 +273,15 @@ Examples:
   
   # View the next upcoming event
   %(prog)s show n
+  
+  # Clear all events from database
+  %(prog)s clear
         """
     )
     
     parser.add_argument(
         'command',
-        choices=['fetch', 'show'],
+        choices=['fetch', 'show', 'clear'],
         help='Command to execute'
     )
     
@@ -308,7 +324,9 @@ Examples:
     
     args = parser.parse_args()
     
-    if args.command == 'show':
+    if args.command == 'clear':
+        clear_database(quiet=args.quiet)
+    elif args.command == 'show':
         if args.event_id is None:
             parser.error(
                 "The show command requires an argument:\n"

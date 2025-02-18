@@ -5,8 +5,8 @@ import logging
 import json
 from .base import BaseScraper
 from ..models.event import Event
-from ..utils.cache import CacheManager
-from ..config.cache import CacheConfig
+from ..utils.cache import CacheManager, CacheConfig, CacheError
+from ..utils.decorators import cached_request, cached_method
 from urllib.parse import urlparse
 
 logger = logging.getLogger(__name__)
@@ -34,47 +34,23 @@ class PeoplyScraper(BaseScraper):
         encoded_time = time_str.replace(':', '%3A')
         return f"{self.base_url}/events?afterDate={encoded_time}&orderBy=startDate"
     
-    def _fetch_json(self, url: str) -> dict:
+    @cached_request(cache_key="events_list")
+    def _fetch_json(self, url: str) -> str:
         """Fetch JSON content with caching support"""
-        # Use a fixed identifier for caching, ignoring the timestamp
-        identifier = 'events_list'
-        
-        # Try to load from cache first, unless force_live is enabled
-        if self.cache_config.is_cache_enabled(self.name()) and not self.cache_config.should_use_live(self.name()):
-            cached_content = self.cache_manager.load(self.name(), identifier)
-            if cached_content:
-                logger.debug(f"Loading cached content for {url}")
-                return json.loads(cached_content)
-        
-        # Fetch fresh content
-        logger.info(f"Fetching fresh content from {url}")
         response = requests.get(url, headers=self.headers)
         response.raise_for_status()
-        
-        # Cache the response if caching is enabled
-        if self.cache_config.is_cache_enabled(self.name()):
-            self.cache_manager.save(
-                self.name(),
-                identifier,
-                json.dumps(response.json(), indent=2),
-                metadata={
-                    'url': url,
-                    'content_type': response.headers.get('content-type'),
-                    'status_code': response.status_code
-                }
-            )
-        
-        return response.json()
+        return response.text  # Return raw response text
     
     def get_events(self) -> List[Event]:
         """Get events from peoply.app API"""
         try:
-            # Fetch events from API
-            api_events = self._fetch_json(self._get_api_url())
+            # Fetch events from API (using cache if available)
+            raw_response = self._fetch_json(self._get_api_url())
+            api_events = json.loads(raw_response)
             logger.info(f"Found {len(api_events)} events from API")
             
             events = []
-            for api_event in api_events:
+            for api_event in api_events[:10]:  # Limit to 10 most recent events
                 try:
                     # Convert API event to our format
                     event = Event(
