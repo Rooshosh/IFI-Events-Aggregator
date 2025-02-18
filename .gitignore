@@ -13,3 +13,10 @@ ENV/
 .vscode/
 data/cache/
 .coverage
+
+# Replit specific
+.replit
+replit.nix
+.config/
+.upm/
+.cache/
