@@ -10,14 +10,14 @@ if __name__ == '__main__':
             * Debug mode with detailed error pages
             * Interactive debugger
             * Auto-reload on code changes
-        Example: FLASK_ENV=development python run.py
+        Example: FLASK_ENV=development flask run --port=5001
     
     Production:
         - Never enable debug mode
         - Use a production WSGI server (e.g., Gunicorn, uWSGI)
         - Set FLASK_ENV=production or don't set it at all
         - Remove or disable test routes (like test-500)
-        Example: python run.py
+        Example: gunicorn 'src.web:app'
         
     Note: The current setup is intended for development. 
     For production deployment, additional security measures should be implemented.

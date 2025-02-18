@@ -34,6 +34,8 @@ from pathlib import Path
 import argparse
 from typing import List, Optional
 from datetime import datetime
+from zoneinfo import ZoneInfo
+from sqlalchemy import text
 
 # Add src directory to Python path
 sys.path.append(str(Path(__file__).parent.parent))
@@ -213,6 +215,24 @@ def get_event_by_id(event_id: int) -> Optional[Event]:
     finally:
         close_db()
 
+def get_random_event() -> Optional[Event]:
+    """Get a random event from the database"""
+    db = get_db()
+    try:
+        # Use SQLite's random() function to get a random event
+        return db.query(Event).order_by(text('RANDOM()')).first()
+    finally:
+        close_db()
+
+def get_next_event() -> Optional[Event]:
+    """Get the next upcoming event from the current date/time"""
+    db = get_db()
+    try:
+        now = datetime.now(ZoneInfo("UTC"))
+        return db.query(Event).filter(Event.start_time > now).order_by(Event.start_time.asc()).first()
+    finally:
+        close_db()
+
 def main():
     """Main CLI interface for the events management tool."""
     parser = argparse.ArgumentParser(
@@ -232,8 +252,14 @@ Examples:
   # View detailed event information
   %(prog)s fetch --detailed
   
-  # View a single event in both summary and detailed format
+  # View a specific event by ID
   %(prog)s show 1
+  
+  # View a random event
+  %(prog)s show r
+  
+  # View the next upcoming event
+  %(prog)s show n
         """
     )
     
@@ -245,9 +271,9 @@ Examples:
     
     parser.add_argument(
         'event_id',
-        type=int,
+        type=str,
         nargs='?',
-        help='Event ID to show (required for show command)'
+        help='Event ID to show (required for show command). Use "r" for random event or "n" for next upcoming event'
     )
     
     parser.add_argument(
@@ -284,15 +310,46 @@ Examples:
     
     if args.command == 'show':
         if args.event_id is None:
-            parser.error("The show command requires an event ID")
-        event = get_event_by_id(args.event_id)
+            parser.error(
+                "The show command requires an argument:\n"
+                "  - A numeric event ID (e.g., 'show 1')\n"
+                "  - 'r' for a random event (e.g., 'show r')\n"
+                "  - 'n' for the next upcoming event (e.g., 'show n')"
+            )
+        
+        event = None
+        if args.event_id.lower() == 'r':
+            event = get_random_event()
+            if not event:
+                logger.error("No events found in the database")
+                return
+            logger.info("Showing random event:")
+        elif args.event_id.lower() == 'n':
+            event = get_next_event()
+            if not event:
+                logger.error("No upcoming events found")
+                return
+            logger.info("Showing next upcoming event:")
+        else:
+            try:
+                event_id = int(args.event_id)
+                event = get_event_by_id(event_id)
+                if not event:
+                    logger.error(f"No event found with ID {event_id}")
+                    return
+            except ValueError:
+                parser.error(
+                    f"Invalid event identifier '{args.event_id}'. Use:\n"
+                    "  - A numeric event ID (e.g., 'show 1')\n"
+                    "  - 'r' for a random event (e.g., 'show r')\n"
+                    "  - 'n' for the next upcoming event (e.g., 'show n')"
+                )
+        
         if event:
             logger.info("Summary view:")
             logger.info(event.to_summary_string())
             logger.info("\nDetailed view:")
             logger.info(event.to_detailed_string())
-        else:
-            logger.error(f"No event found with ID {args.event_id}")
     elif args.command == 'fetch':
         if not args.no_store:
             init_db()
