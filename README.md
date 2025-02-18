@@ -50,6 +50,46 @@ IFI-Events-Aggregator/
    pip install -r requirements.txt
    ```
 
+## Development vs Production
+
+### Development Mode
+During development, run the application with debug mode enabled:
+```bash
+FLASK_ENV=development python run.py
+```
+
+This enables:
+- Detailed error pages with tracebacks
+- Interactive debugger
+- Automatic code reloading
+- Test routes (e.g., /test-500 for error page testing)
+
+### Production Deployment
+For production deployment:
+
+1. Disable debug mode:
+   ```bash
+   python run.py  # or FLASK_ENV=production python run.py
+   ```
+
+2. Use a production WSGI server:
+   ```bash
+   pip install gunicorn  # Install Gunicorn
+   gunicorn -w 4 'src.web:app'  # Run with 4 worker processes
+   ```
+
+3. Security considerations:
+   - Remove or disable test routes (like test-500)
+   - Configure proper logging instead of showing errors to users
+   - Set appropriate file permissions
+   - Use HTTPS
+   - Set secure headers
+   - Configure proper user authentication
+
+4. Environment variables:
+   - Set `FLASK_ENV=production`
+   - Configure any sensitive data through environment variables
+
 ## Usage
 
 ### Basic Usage

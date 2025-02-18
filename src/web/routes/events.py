@@ -33,4 +33,10 @@ def index():
             )
             for e in events
         ]
-        return render_template('index.html', events=events) 
+        return render_template('index.html', events=events)
+
+@events_bp.route('/test-500')
+def test_500():
+    """Route to test 500 error page"""
+    # Deliberately raise an exception
+    raise Exception("This is a test error to view the 500 error page") 

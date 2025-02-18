@@ -14,7 +14,4 @@ def not_found_error(error):
 
 @app.errorhandler(500)
 def internal_error(error):
-    return render_template('errors/500.html'), 500
-
-# Development configuration
-app.config['DEBUG'] = True 
+    return render_template('errors/500.html'), 500 
