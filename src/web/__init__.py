@@ -7,6 +7,7 @@ app = Flask(__name__)
 
 # Initialize database with app
 db_manager.init_app(app)
+db_manager.init_db()  # Create tables if they don't exist
 
 # Register blueprints
 app.register_blueprint(events_bp)
