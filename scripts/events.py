@@ -33,13 +33,12 @@ import sys
 from pathlib import Path
 import argparse
 from typing import List, Optional
-import sqlite3
 from datetime import datetime
 
 # Add src directory to Python path
 sys.path.append(str(Path(__file__).parent.parent))
 
-from src.db.database import init_db, get_db, get_db_path
+from src.db import init_db, get_db, close_db
 from src.scrapers.navet import NavetScraper
 from src.scrapers.peoply import PeoplyScraper
 from src.utils.cache import CacheConfig
@@ -155,76 +154,64 @@ def fetch_events(
     all_events = []
     total_stored = 0
     
-    for scraper in scrapers:
-        try:
-            if not use_cache and not quiet:
-                logger.info(f"Fetching live data from {scraper.name()} (will update cache)")
-            elif not quiet:
-                logger.info(f"Using cached data for {scraper.name()}")
-            
-            events = scraper.get_events()
-            if not quiet:
-                logger.info(f"Found {len(events)} events from {scraper.name()}")
-            all_events.extend(events)
-            
-            # Store in database if enabled (default behavior)
-            if store_db:
-                db = get_db()
-                for event in events:
-                    db.merge_event(event)
-                total_stored += len(events)
+    # Get database session if we're storing events
+    db = get_db() if store_db else None
+    
+    try:
+        for scraper in scrapers:
+            try:
+                if not use_cache and not quiet:
+                    logger.info(f"Fetching live data from {scraper.name()} (will update cache)")
+                elif not quiet:
+                    logger.info(f"Using cached data for {scraper.name()}")
+                
+                events = scraper.get_events()
                 if not quiet:
-                    logger.info(f"Stored {len(events)} events in database from {scraper.name()}")
-            elif not quiet:
-                logger.info("Events were not stored in database (--no-store flag used)")
+                    logger.info(f"Found {len(events)} events from {scraper.name()}")
+                all_events.extend(events)
+                
+                # Store in database if enabled (default behavior)
+                if store_db:
+                    for event in events:
+                        db.add(event)
+                    total_stored += len(events)
+                    if not quiet:
+                        logger.info(f"Stored {len(events)} events in database from {scraper.name()}")
+                elif not quiet:
+                    logger.info("Events were not stored in database (--no-store flag used)")
+            
+            except Exception as e:
+                logger.error(f"Error processing events from {scraper.name()}: {e}")
+                continue
         
-        except Exception as e:
-            logger.error(f"Error processing events from {scraper.name()}: {e}")
-            continue
+        # Commit changes if we're storing events
+        if store_db:
+            db.commit()
+        
+        # Print detailed information if requested
+        if detailed_output and not quiet:
+            print_events_info(all_events, detailed=True)
+        
+        # Always show total summary, even in quiet mode
+        if store_db:
+            logger.warning(f"Total: Found {len(all_events)} events, stored {total_stored} in database")
+        else:
+            logger.warning(f"Total: Found {len(all_events)} events (not stored in database)")
+        
+        return all_events
     
-    # Print detailed information if requested
-    if detailed_output and not quiet:
-        print_events_info(all_events, detailed=True)
-    
-    # Always show total summary, even in quiet mode
-    if store_db:
-        logger.warning(f"Total: Found {len(all_events)} events, stored {total_stored} in database")
-    else:
-        logger.warning(f"Total: Found {len(all_events)} events (not stored in database)")
-    
-    return all_events
+    finally:
+        # Always close the database session if we opened one
+        if store_db:
+            close_db()
 
 def get_event_by_id(event_id: int) -> Optional[Event]:
     """Get a single event from the database by ID"""
-    with sqlite3.connect(get_db_path()) as conn:
-        c = conn.cursor()
-        c.execute('''
-            SELECT id, title, description, start_time, end_time,
-                   location, source_url, source_name, created_at,
-                   food, capacity, spots_left, registration_opens,
-                   registration_url
-            FROM events WHERE id = ?
-        ''', (event_id,))
-        row = c.fetchone()
-        if not row:
-            return None
-        
-        return Event(
-            id=row[0],
-            title=row[1],
-            description=row[2],
-            start_time=datetime.fromisoformat(row[3]),
-            end_time=datetime.fromisoformat(row[4]) if row[4] else None,
-            location=row[5],
-            source_url=row[6],
-            source_name=row[7],
-            created_at=datetime.fromisoformat(row[8]) if row[8] else None,
-            food=row[9],
-            capacity=row[10],
-            spots_left=row[11],
-            registration_opens=datetime.fromisoformat(row[12]) if row[12] else None,
-            registration_url=row[13]
-        )
+    db = get_db()
+    try:
+        return db.query(Event).filter(Event.id == event_id).first()
+    finally:
+        close_db()
 
 def main():
     """Main CLI interface for the events management tool."""

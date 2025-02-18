@@ -1,63 +1,115 @@
-from dataclasses import dataclass
+"""Event model definition using SQLAlchemy ORM."""
+
 from datetime import datetime
 from typing import Optional, Dict, Any
 from zoneinfo import ZoneInfo
+from sqlalchemy import Column, Integer, String, Text, DateTime
+from sqlalchemy.orm import validates
+
+from ..db.base import Base
 
 def ensure_timezone(dt: datetime) -> datetime:
     """Ensure datetime is timezone-aware, converting to UTC if it isn't"""
-    if dt.tzinfo is None:
+    if dt and dt.tzinfo is None:
         return dt.replace(tzinfo=ZoneInfo("UTC"))
     return dt
 
-@dataclass
-class Event:
-    """Data class for events to ensure consistent handling"""
-    title: str
-    description: str
-    start_time: datetime
-    end_time: datetime
-    location: Optional[str]
-    source_url: Optional[str]
-    source_name: Optional[str]
-    id: Optional[int] = None
-    created_at: Optional[datetime] = None
+class Event(Base):
+    """
+    Event model representing an event from any source.
     
-    # New fields
-    capacity: Optional[int] = None  # Total number of spots available
-    spots_left: Optional[int] = None  # Number of spots still available
-    registration_opens: Optional[datetime] = None  # When registration opens
-    registration_url: Optional[str] = None  # URL for registration if different from source_url
-    food: Optional[str] = None  # Description of food/refreshments if provided
+    This model uses SQLAlchemy ORM for database operations. The database is automatically
+    recreated when running `python scripts/events.py fetch`, which makes it easy to modify
+    fields during development.
+
+    To modify fields:
+    1. Add a field: Add a new Column definition to this class
+    2. Remove a field: Delete the Column definition
+    3. Modify a field: Update the Column definition
+    4. After any change: Run `fetch` command to recreate the database
+
+    Remember to:
+    - Update relevant scrapers if adding new fields they should populate
+    - Update any code that directly references modified/removed fields
+    - Consider adding validation using the @validates decorator if needed
     
-    def __post_init__(self):
-        """Ensure all datetime fields are timezone-aware"""
-        self.start_time = ensure_timezone(self.start_time)
-        self.end_time = ensure_timezone(self.end_time) if self.end_time else None
-        self.created_at = ensure_timezone(self.created_at) if self.created_at else None
-        self.registration_opens = ensure_timezone(self.registration_opens) if self.registration_opens else None
+    Fields:
+        id: Unique identifier (auto-generated)
+        title: Event title
+        description: Event description
+        start_time: When the event starts
+        end_time: When the event ends (optional)
+        location: Where the event takes place (optional)
+        source_url: URL to the event's source page (optional)
+        source_name: Name of the source (e.g., 'peoply.app', 'ifinavet.no')
+        created_at: When this event was first created in our database
+        capacity: Total number of spots available (optional)
+        spots_left: Number of spots still available (optional)
+        registration_opens: When registration opens (optional)
+        registration_url: URL for registration if different from source_url (optional)
+        food: Description of food/refreshments if provided (optional)
+    """
+    __tablename__ = 'events'
+    
+    # Required fields
+    id = Column(Integer, primary_key=True)
+    title = Column(String, nullable=False)
+    description = Column(Text)
+    start_time = Column(DateTime(timezone=True), nullable=False)
+    
+    # Optional fields
+    end_time = Column(DateTime(timezone=True))
+    location = Column(String)
+    source_url = Column(String)
+    source_name = Column(String)
+    created_at = Column(DateTime(timezone=True), default=datetime.now)
+    capacity = Column(Integer)
+    spots_left = Column(Integer)
+    registration_opens = Column(DateTime(timezone=True))
+    registration_url = Column(String)
+    food = Column(String)
+    
+    def __init__(self, **kwargs):
+        """Initialize an Event with the given attributes."""
+        # Ensure timezone-aware datetimes
+        if 'start_time' in kwargs:
+            kwargs['start_time'] = ensure_timezone(kwargs['start_time'])
+        if 'end_time' in kwargs:
+            kwargs['end_time'] = ensure_timezone(kwargs['end_time'])
+        if 'registration_opens' in kwargs:
+            kwargs['registration_opens'] = ensure_timezone(kwargs['registration_opens'])
+        if 'created_at' in kwargs:
+            kwargs['created_at'] = ensure_timezone(kwargs['created_at'])
+        
+        super().__init__(**kwargs)
+    
+    @validates('start_time', 'end_time', 'registration_opens', 'created_at')
+    def validate_datetime(self, key, value):
+        """Ensure all datetime fields are timezone-aware."""
+        return ensure_timezone(value) if value else value
     
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'Event':
-        """Create an Event from a dictionary"""
+        """Create an Event from a dictionary."""
         return cls(
             title=data['title'],
             description=data['description'],
-            start_time=ensure_timezone(data['start_time']),
-            end_time=ensure_timezone(data['end_time']) if data['end_time'] else None,
+            start_time=data['start_time'],
+            end_time=data.get('end_time'),
             location=data.get('location'),
             source_url=data.get('source_url'),
             source_name=data.get('source_name'),
             id=data.get('id'),
-            created_at=ensure_timezone(data['created_at']) if data.get('created_at') else None,
+            created_at=data.get('created_at'),
             capacity=data.get('capacity'),
             spots_left=data.get('spots_left'),
-            registration_opens=ensure_timezone(data['registration_opens']) if data.get('registration_opens') else None,
+            registration_opens=data.get('registration_opens'),
             registration_url=data.get('registration_url'),
             food=data.get('food')
         )
     
     def to_dict(self) -> Dict[str, Any]:
-        """Convert Event to dictionary"""
+        """Convert Event to dictionary."""
         return {
             'id': self.id,
             'title': self.title,
@@ -74,13 +126,13 @@ class Event:
             'registration_url': self.registration_url,
             'food': self.food
         }
-
+    
     def __str__(self) -> str:
-        """Default string representation with basic event information"""
+        """Default string representation with basic event information."""
         return f"{self.title} ({self.start_time.strftime('%Y-%m-%d %H:%M')})"
     
     def to_detailed_string(self) -> str:
-        """Detailed string representation with all available event information"""
+        """Detailed string representation with all available event information."""
         lines = [
             "-" * 80,
             f"Title: {self.title}",
@@ -110,7 +162,7 @@ class Event:
         return "\n".join(lines)
     
     def to_summary_string(self) -> str:
-        """Summary string representation with key event information"""
+        """Summary string representation with key event information."""
         summary = [f"{self.title} - {self.start_time.strftime('%Y-%m-%d %H:%M')}"]
         
         if self.location:

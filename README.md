@@ -11,6 +11,7 @@ A Python application that aggregates and displays events from various UiO IFI (D
 - Automatic deduplication of events
 - Web interface to view upcoming events
 - Timezone-aware event handling
+- SQLAlchemy ORM for robust database operations
 
 ## Components
 
@@ -19,7 +20,7 @@ The project consists of several key components:
 - **Event Scrapers**: Modules for fetching events from different sources (using BeautifulSoup4 and Requests)
 - **Web Interface**: Flask-based web application for viewing events
 - **CLI Tools**: Command-line tools for managing events and system maintenance
-- **Storage**: SQLite-based storage with smart event merging and caching system
+- **Storage**: SQLAlchemy-powered SQLite database with smart event merging and caching system
 - **Test Suite**: Comprehensive tests for all components
 
 ## Quick Start
@@ -48,6 +49,15 @@ The project consists of several key components:
 - The web interface includes inline help and tooltips
 
 ## Development
+
+### Database Operations
+
+The project uses SQLAlchemy ORM for database operations:
+
+- Event data model is defined in `src/models/event.py`
+- Database configuration is in `src/db/base.py`
+- During development, the database is automatically recreated when running `python scripts/events.py fetch`
+- See docstrings in the code for detailed usage examples and field modification instructions
 
 ### Adding a New Event Source
 

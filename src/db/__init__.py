@@ -1,3 +1,5 @@
-from .database import init_db, get_db, Database, get_db_path
+"""Database package initialization."""
 
-__all__ = ['init_db', 'get_db', 'Database', 'get_db_path'] 
+from .base import init_db, get_db, close_db, DB_PATH
+
+__all__ = ['init_db', 'get_db', 'close_db', 'DB_PATH'] 
