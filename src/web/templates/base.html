@@ -5,6 +5,72 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>IFI Events Aggregator</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet">
+    <script src='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.js'></script>
+    <style>
+        .event-time { 
+            font-size: 1rem;
+            font-weight: 500;
+        }
+        .event-duration { 
+            color: #6c757d;
+            font-size: 0.9rem;
+            margin-top: 0.25rem;
+        }
+        .food-badge {
+            color: #28a745;
+            padding: 0.25rem 0;
+            font-size: 0.9rem;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.25rem;
+        }
+        .add-calendar-btn {
+            font-size: 0.85rem;
+            padding: 0.25rem 0.5rem;
+        }
+        .view-switcher {
+            margin-bottom: 1rem;
+        }
+        #calendar {
+            margin-top: 1rem;
+        }
+        .fc-event {
+            cursor: pointer;
+        }
+        .fc-event-title {
+            font-weight: 500;
+        }
+        #grid-view {
+            width: 100%;
+            display: block;
+        }
+        #grid-view .row {
+            margin-right: 0;
+            margin-left: 0;
+        }
+        @media (max-width: 768px) {
+            .card-body {
+                padding: 1.25rem;
+            }
+            .btn {
+                padding: 0.5rem 1rem;
+                width: 100%;
+                margin-bottom: 0.5rem;
+            }
+            .event-time, .event-duration {
+                line-height: 1.4;
+            }
+            .fc-toolbar {
+                flex-direction: column;
+                gap: 0.5rem;
+            }
+            .fc-toolbar-chunk {
+                display: flex;
+                justify-content: center;
+            }
+        }
+    </style>
 </head>
 <body>
     <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
@@ -18,5 +84,111 @@
     </main>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/luxon@3.4.4/build/global/luxon.min.js"></script>
+    <script>
+        // Initialize all relative times on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            updateRelativeTimes();
+            // Update times every minute
+            setInterval(updateRelativeTimes, 60000);
+
+            // Initialize calendar if it exists
+            const calendarEl = document.getElementById('calendar');
+            if (calendarEl && window.calendarEvents) {
+                const calendar = new FullCalendar.Calendar(calendarEl, {
+                    initialView: 'dayGridMonth',
+                    headerToolbar: {
+                        left: 'prev,next today',
+                        center: 'title',
+                        right: 'dayGridMonth,dayGridWeek'
+                    },
+                    events: window.calendarEvents,
+                    eventClick: function(info) {
+                        if (info.event.url) {
+                            window.open(info.event.url, '_blank');
+                            info.jsEvent.preventDefault();
+                        }
+                    },
+                    eventDidMount: function(info) {
+                        // Add tooltips
+                        let tooltip = info.event.title;
+                        if (info.event.extendedProps.location) {
+                            tooltip += `\n📍 ${info.event.extendedProps.location}`;
+                        }
+                        if (info.event.extendedProps.food) {
+                            tooltip += `\n🍽️ ${info.event.extendedProps.food}`;
+                        }
+                        info.el.title = tooltip;
+                    }
+                });
+                calendar.render();
+            }
+        });
+
+        function updateRelativeTimes() {
+            document.querySelectorAll('[data-event-time]').forEach(element => {
+                const timestamp = element.getAttribute('data-event-time');
+                const dt = luxon.DateTime.fromISO(timestamp);
+                element.textContent = dt.toRelative({ locale: 'en' });
+            });
+        }
+
+        function generateCalendarUrl(title, start, end, location, description) {
+            // Format dates for Google Calendar (YYYYMMDDTHHMMSSZ)
+            const formatDate = (dateStr) => {
+                if (!dateStr) return '';
+                const dt = luxon.DateTime.fromISO(dateStr);
+                return dt.toUTC().toFormat('yyyyMMdd\'T\'HHmmss\'Z\'');
+            };
+
+            const event = {
+                text: title,
+                dates: formatDate(start) + (end ? '/' + formatDate(end) : ''),
+                location: location || '',
+                details: description || ''
+            };
+
+            return 'https://calendar.google.com/calendar/render?action=TEMPLATE&text=' + 
+                   encodeURIComponent(event.text) + '&dates=' + encodeURIComponent(event.dates) +
+                   '&location=' + encodeURIComponent(event.location) + 
+                   '&details=' + encodeURIComponent(event.details);
+        }
+
+        function addToCalendar(button) {
+            const url = generateCalendarUrl(
+                button.getAttribute('data-event-title'),
+                button.getAttribute('data-event-start'),
+                button.getAttribute('data-event-end'),
+                button.getAttribute('data-event-location'),
+                button.getAttribute('data-event-description')
+            );
+            window.open(url, '_blank');
+        }
+
+        function switchView(view) {
+            document.getElementById('grid-view').style.display = view === 'grid' ? 'block' : 'none';
+            document.getElementById('calendar-view').style.display = view === 'calendar' ? 'block' : 'none';
+            
+            // Update active button state
+            document.querySelectorAll('.view-switcher .btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            document.querySelector(`.view-switcher .btn[data-view="${view}"]`).classList.add('active');
+
+            // Trigger window resize to fix calendar rendering
+            if (view === 'calendar') {
+                window.dispatchEvent(new Event('resize'));
+            }
+
+            // Store preference
+            localStorage.setItem('preferredView', view);
+        }
+
+        // Initialize view based on stored preference
+        document.addEventListener('DOMContentLoaded', function() {
+            const preferredView = localStorage.getItem('preferredView') || 'grid';
+            switchView(preferredView);
+        });
+    </script>
 </body>
 </html> 

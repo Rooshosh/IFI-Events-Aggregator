@@ -1,29 +1,106 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="row">
-    {% for event in events %}
-    <div class="col-md-6 mb-4">
-        <div class="card h-100">
-            <div class="card-body">
-                <h5 class="card-title">{{ event.title }}</h5>
-                <h6 class="card-subtitle mb-2 text-muted">
-                    {{ event.start_time.strftime('%Y-%m-%d %H:%M') }}
-                    {% if event.end_time %}
-                        - {{ event.end_time.strftime('%H:%M') }}
-                    {% endif %}
-                </h6>
-                {% if event.location %}
-                    <p class="card-text"><small class="text-muted">📍 {{ event.location }}</small></p>
-                {% endif %}
-                <p class="card-text">{{ event.description[:200] }}{% if event.description|length > 200 %}...{% endif %}</p>
-                {% if event.source_url %}
-                    <a href="{{ event.source_url }}" class="btn btn-primary" target="_blank">More Info</a>
-                {% endif %}
-                <small class="text-muted d-block mt-2">Source: {{ event.source_name }}</small>
+<!-- View Switcher -->
+<div class="d-flex justify-content-center mb-4">
+    <div class="view-switcher btn-group" role="group" aria-label="View switcher">
+        <button type="button" class="btn btn-outline-primary active" data-view="grid" onclick="switchView('grid')">
+            <i class="bi bi-grid"></i> Grid View
+        </button>
+        <button type="button" class="btn btn-outline-primary" data-view="calendar" onclick="switchView('calendar')">
+            <i class="bi bi-calendar3"></i> Calendar View
+        </button>
+    </div>
+</div>
+
+<!-- Grid View -->
+<div id="grid-view">
+    <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4">
+        {% for event in events %}
+        <div class="col">
+            <div class="card h-100">
+                <div class="card-body">
+                    <h5 class="card-title">{{ event.title }}</h5>
+                    
+                    <!-- Time information -->
+                    <div class="mb-3">
+                        <div class="event-time">
+                            <span data-event-time="{{ event.start_time.isoformat() }}">
+                                {{ event.start_time.strftime('%Y-%m-%d %H:%M') }}
+                            </span>
+                        </div>
+                        
+                        <div class="event-duration">
+                            {{ event.start_time.strftime('%A, %B %d at %H:%M') }}
+                            {% if event.end_time %}
+                                - {{ event.end_time.strftime('%H:%M') }}
+                                <small>({{ (event.end_time - event.start_time).total_seconds() // 3600 }} hours)</small>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <!-- Location and Food -->
+                    <div class="mb-3">
+                        {% if event.location %}
+                            <p class="card-text mb-2"><small class="text-muted">📍 {{ event.location }}</small></p>
+                        {% endif %}
+                        {% if event.food %}
+                            <span class="food-badge">
+                                🍽️ {{ event.food }}
+                            </span>
+                        {% endif %}
+                    </div>
+
+                    <!-- Description -->
+                    <p class="card-text">{{ event.description[:200] }}{% if event.description|length > 200 %}...{% endif %}</p>
+                    
+                    <!-- Action buttons -->
+                    <div class="mt-3 d-flex flex-wrap gap-2">
+                        {% if event.source_url %}
+                            <a href="{{ event.source_url }}" class="btn btn-primary" target="_blank">Event Details</a>
+                        {% endif %}
+                        <button onclick="addToCalendar(this)" 
+                                data-event-title="{{ event.title }}"
+                                data-event-start="{{ event.start_time.isoformat() }}"
+                                data-event-end="{% if event.end_time %}{{ event.end_time.isoformat() }}{% endif %}"
+                                data-event-location="{% if event.location %}{{ event.location }}{% endif %}"
+                                data-event-description="{{ event.description }}"
+                                class="btn btn-outline-secondary">
+                            📅 Add to Calendar
+                        </button>
+                    </div>
+
+                    <!-- Source information -->
+                    <small class="text-muted d-block mt-2">Source: {{ event.source_name }}</small>
+                </div>
             </div>
         </div>
+        {% endfor %}
     </div>
-    {% endfor %}
 </div>
+
+<!-- Calendar View -->
+<div id="calendar-view" style="display: none;">
+    <div id="calendar"></div>
+</div>
+
+<!-- Calendar Events Data -->
+<script>
+    window.calendarEvents = [
+        {% for event in events %}
+        {
+            title: {{ event.title|tojson }},
+            start: {{ event.start_time.isoformat()|tojson }},
+            {% if event.end_time %}end: {{ event.end_time.isoformat()|tojson }},{% endif %}
+            url: {{ event.source_url|tojson if event.source_url else 'null' }},
+            backgroundColor: {{ event.source_name|tojson }} === 'peoply.app' ? '#0d6efd' : '#198754',
+            extendedProps: {
+                location: {{ event.location|tojson if event.location else 'null' }},
+                food: {{ event.food|tojson if event.food else 'null' }},
+                source: {{ event.source_name|tojson }}
+            }
+        }{% if not loop.last %},{% endif %}
+        {% endfor %}
+    ];
+</script>
 {% endblock %} 
