@@ -97,33 +97,29 @@ def are_events_duplicate(event1: Event, event2: Event, config: DuplicateConfig =
 def merge_events(event1: Event, event2: Event) -> Event:
     """
     Merge two events that are considered duplicates.
-    Takes the most complete information from both events.
+    Always uses data from the newer event (based on fetched_at timestamp).
+    If fetched_at is the same, keeps existing data.
     
-    This function automatically handles all fields in the Event model,
-    including any that might be added in the future. For each field:
-    - If only one event has the field set, use that value
-    - If both have it set, use a field-specific merge strategy
-    - If neither has it set, leave it as None
+    Args:
+        event1: First event (typically the existing one in the database)
+        event2: Second event (typically the new one being considered)
+    
+    Returns:
+        Event: Merged event object
     """
-    # Get all column names from the Event model
-    columns = _get_event_columns()
+    # Determine which event is newer
+    event1_time = event1.fetched_at or datetime.min.replace(tzinfo=event1.start_time.tzinfo)
+    event2_time = event2.fetched_at or datetime.min.replace(tzinfo=event2.start_time.tzinfo)
     
-    # Start with a dict to hold merged values
-    merged_values = {}
+    # If event2 is newer, use all its data
+    if event2_time > event1_time:
+        # Keep the id and created_at from event1 if it exists
+        event2.id = event1.id if event1.id else event2.id
+        event2.created_at = event1.created_at if event1.created_at else event2.created_at
+        return event2
     
-    # Process each column
-    for column in columns:
-        if column in EVENT_MERGE_STRATEGIES:
-            # Use special handling for fields that need custom merge logic
-            merged_values[column] = EVENT_MERGE_STRATEGIES[column](event1, event2)
-        else:
-            # Default behavior for all other fields: take first non-None value
-            val1 = getattr(event1, column)
-            val2 = getattr(event2, column)
-            merged_values[column] = val1 if val1 is not None else val2
-    
-    # Create new event with merged values
-    return Event(**merged_values)
+    # If same timestamp or event1 is newer, keep event1
+    return event1
 
 def _get_event_columns() -> List[str]:
     """Get all column names from the Event model"""

@@ -62,6 +62,16 @@ class CacheManager:
         """Get the path for the cache metadata file"""
         return cache_path.with_suffix('.meta.json')
     
+    def get_metadata(self, source_name: str, identifier: str) -> Optional[Dict[str, Any]]:
+        """Get metadata for a cached item if it exists"""
+        meta_file = self.get_meta_path(self.get_cache_path(source_name, identifier))
+        if meta_file.exists():
+            try:
+                return json.loads(meta_file.read_text(encoding='utf-8'))
+            except json.JSONDecodeError:
+                logger.warning(f"Failed to read metadata for {source_name}/{identifier}")
+        return None
+    
     def save(self, source_name: str, identifier: str, content: str, 
              metadata: Optional[Dict[str, Any]] = None) -> None:
         """Save content to cache with metadata"""

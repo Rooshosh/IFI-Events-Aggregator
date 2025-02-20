@@ -53,6 +53,11 @@ class PeoplyScraper(BaseScraper):
             # Fetch events from API (using cache if available)
             api_url = self._get_api_url()
             raw_response = self._fetch_json(api_url)
+            
+            # Get the fetch timestamp from cache metadata
+            meta = self.cache_manager.get_metadata(self.name(), 'events_list')
+            fetch_time = datetime.fromisoformat(meta['cached_at']) if meta else now_oslo()
+            
             api_events = json.loads(raw_response)
             logger.info(f"Found {len(api_events)} events from API")
             
@@ -71,7 +76,8 @@ class PeoplyScraper(BaseScraper):
                         ),
                         location=api_event['locationName'],
                         source_url=f"https://peoply.app/events/{api_event['urlId']}",
-                        source_name=self.name()
+                        source_name=self.name(),
+                        fetched_at=fetch_time
                     )
                     
                     # Add additional location details if available

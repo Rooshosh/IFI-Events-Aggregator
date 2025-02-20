@@ -46,6 +46,7 @@ from src.scrapers.peoply import PeoplyScraper
 from src.utils.cache import CacheConfig
 from src.models.event import Event
 from src.utils.timezone import now_oslo
+from src.utils.deduplication import check_duplicate_before_insert
 
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
