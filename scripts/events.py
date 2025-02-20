@@ -46,6 +46,7 @@ from src.scrapers.peoply import PeoplyScraper
 from src.utils.cache import CacheConfig
 from src.models.event import Event
 from src.utils.timezone import now_oslo
+from src.utils.deduplication import check_duplicate_before_insert
 
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -156,6 +157,7 @@ def fetch_events(
     
     all_events = []
     total_stored = 0
+    total_merged = 0
     
     # Get database session if we're storing events
     db = get_db() if store_db else None
@@ -176,10 +178,22 @@ def fetch_events(
                 # Store in database if enabled (default behavior)
                 if store_db:
                     for event in events:
-                        db.add(event)
-                    total_stored += len(events)
+                        # Check for duplicates before adding
+                        duplicate = check_duplicate_before_insert(event, db_path=str(Path(__file__).parent.parent / 'events.db'))
+                        if duplicate:
+                            # Use the merged event instead
+                            db.merge(duplicate)
+                            total_merged += 1
+                            if not quiet:
+                                logger.info(f"Merged duplicate event: {event.title}")
+                        else:
+                            # Add new event
+                            db.add(event)
+                            total_stored += 1
+                    
                     if not quiet:
-                        logger.info(f"Stored {len(events)} events in database from {scraper.name()}")
+                        logger.info(f"Processed {len(events)} events from {scraper.name()} "
+                                  f"({total_stored} new, {total_merged} merged)")
                 elif not quiet:
                     logger.info("Events were not stored in database (--no-store flag used)")
             
@@ -197,7 +211,8 @@ def fetch_events(
         
         # Always show total summary, even in quiet mode
         if store_db:
-            logger.warning(f"Total: Found {len(all_events)} events, stored {total_stored} in database")
+            logger.warning(f"Total: Found {len(all_events)} events "
+                         f"({total_stored} new, {total_merged} merged)")
         else:
             logger.warning(f"Total: Found {len(all_events)} events (not stored in database)")
         
@@ -277,12 +292,18 @@ Examples:
   
   # Clear all events from database
   %(prog)s clear
+  
+  # Deduplicate events in database
+  %(prog)s deduplicate
+  
+  # Deduplicate with custom settings
+  %(prog)s deduplicate --title-similarity 0.7 --time-window 60
         """
     )
     
     parser.add_argument(
         'command',
-        choices=['fetch', 'show', 'clear'],
+        choices=['fetch', 'show', 'clear', 'deduplicate'],
         help='Command to execute'
     )
     
@@ -321,6 +342,33 @@ Examples:
         '--quiet',
         action='store_true',
         help='Reduce output verbosity'
+    )
+    
+    # Add deduplication-specific arguments
+    parser.add_argument(
+        '--title-similarity',
+        type=float,
+        default=0.85,
+        help='Title similarity threshold (0-1, default: 0.85)'
+    )
+    
+    parser.add_argument(
+        '--time-window',
+        type=int,
+        default=120,
+        help='Time window in minutes for considering events duplicates (default: 120)'
+    )
+    
+    parser.add_argument(
+        '--require-location',
+        action='store_true',
+        help='Require location to match for duplicate detection'
+    )
+    
+    parser.add_argument(
+        '--require-exact-time',
+        action='store_true',
+        help='Require exact time match for duplicate detection'
     )
     
     args = parser.parse_args()
@@ -369,6 +417,32 @@ Examples:
             logger.info(event.to_summary_string())
             logger.info("\nDetailed view:")
             logger.info(event.to_detailed_string())
+    elif args.command == 'deduplicate':
+        from src.utils.deduplication import deduplicate_database, DuplicateConfig
+        
+        # Create config from command line arguments
+        config = DuplicateConfig(
+            title_similarity_threshold=args.title_similarity,
+            time_window_minutes=args.time_window,
+            require_same_location=args.require_location,
+            require_exact_time=args.require_exact_time
+        )
+        
+        # Run deduplication
+        db_path = str(Path(__file__).parent.parent / 'events.db')
+        if not args.quiet:
+            logger.info("Starting database deduplication...")
+            logger.info(f"Using settings:")
+            logger.info(f"  - Title similarity threshold: {config.title_similarity_threshold}")
+            logger.info(f"  - Time window: {config.time_window_minutes} minutes")
+            logger.info(f"  - Require location match: {config.require_same_location}")
+            logger.info(f"  - Require exact time: {config.require_exact_time}")
+        
+        duplicate_count, merged_events = deduplicate_database(db_path, config)
+        
+        if not args.quiet:
+            logger.info(f"Found and merged {duplicate_count} duplicate events")
+            logger.info(f"Database now contains {len(merged_events)} unique events")
     elif args.command == 'fetch':
         if not args.no_store:
             init_db()

@@ -243,6 +243,10 @@ class NavetScraper(BaseScraper):
             url = f"{self.base_url}/arrangementer/2025/var/"
             html = self._fetch_html(url)
             
+            # Get the fetch timestamp from cache metadata
+            meta = self.cache_manager.get_metadata(self.name(), 'arrangementer_2025_var')
+            fetch_time = datetime.fromisoformat(meta['cached_at']) if meta else now_oslo()
+            
             # Process the HTML
             soup = BeautifulSoup(html, 'html.parser')
             
@@ -260,6 +264,8 @@ class NavetScraper(BaseScraper):
             for event_card in event_cards:
                 event = self._parse_event_card(event_card)
                 if event:
+                    # Set the fetch time
+                    event.fetched_at = fetch_time
                     # Fetch additional details for each event (using cache if available)
                     details_html = self._fetch_html(event.source_url)
                     event = self._parse_event_details(event, details_html)

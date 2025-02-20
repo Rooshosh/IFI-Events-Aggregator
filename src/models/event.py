@@ -38,6 +38,7 @@ class Event(Base):
         source_url: URL to the event's source page (optional)
         source_name: Name of the source (e.g., 'peoply.app', 'ifinavet.no')
         created_at: When this event was first created in our database
+        fetched_at: When this event's data was fetched from the source
         capacity: Total number of spots available (optional)
         spots_left: Number of spots still available (optional)
         registration_opens: When registration opens (optional)
@@ -58,6 +59,7 @@ class Event(Base):
     source_url = Column(String)
     source_name = Column(String)
     created_at = Column(DateTime(timezone=True), default=now_oslo)
+    fetched_at = Column(DateTime(timezone=True))  # When the event data was fetched from source
     capacity = Column(Integer)
     spots_left = Column(Integer)
     registration_opens = Column(DateTime(timezone=True))
@@ -67,13 +69,13 @@ class Event(Base):
     def __init__(self, **kwargs):
         """Initialize an Event with the given attributes."""
         # Ensure timezone-aware datetimes and convert to Oslo time
-        for field in ['start_time', 'end_time', 'registration_opens', 'created_at']:
+        for field in ['start_time', 'end_time', 'registration_opens', 'created_at', 'fetched_at']:
             if field in kwargs:
                 kwargs[field] = ensure_oslo_timezone(kwargs[field])
         
         super().__init__(**kwargs)
     
-    @validates('start_time', 'end_time', 'registration_opens', 'created_at')
+    @validates('start_time', 'end_time', 'registration_opens', 'created_at', 'fetched_at')
     def validate_datetime(self, key, value):
         """Ensure all datetime fields are in Europe/Oslo timezone."""
         return ensure_oslo_timezone(value)
@@ -91,6 +93,7 @@ class Event(Base):
             source_name=data.get('source_name'),
             id=data.get('id'),
             created_at=data.get('created_at'),
+            fetched_at=data.get('fetched_at'),
             capacity=data.get('capacity'),
             spots_left=data.get('spots_left'),
             registration_opens=data.get('registration_opens'),
@@ -110,6 +113,7 @@ class Event(Base):
             'source_url': self.source_url,
             'source_name': self.source_name,
             'created_at': self.created_at,
+            'fetched_at': self.fetched_at,
             'capacity': self.capacity,
             'spots_left': self.spots_left,
             'registration_opens': self.registration_opens,
@@ -168,7 +172,7 @@ class Event(Base):
 @sa_event.listens_for(Event, 'load')
 def receive_load(target, context):
     """Ensure timezone information when loading from database"""
-    for field in ['start_time', 'end_time', 'registration_opens', 'created_at']:
+    for field in ['start_time', 'end_time', 'registration_opens', 'created_at', 'fetched_at']:
         if hasattr(target, field) and getattr(target, field) is not None:
             setattr(target, field, ensure_oslo_timezone(getattr(target, field)))
 
@@ -176,6 +180,6 @@ def receive_load(target, context):
 @sa_event.listens_for(Event, 'before_update')
 def receive_before_save(mapper, connection, target):
     """Ensure timezone information before saving to database"""
-    for field in ['start_time', 'end_time', 'registration_opens', 'created_at']:
+    for field in ['start_time', 'end_time', 'registration_opens', 'created_at', 'fetched_at']:
         if hasattr(target, field) and getattr(target, field) is not None:
             setattr(target, field, ensure_oslo_timezone(getattr(target, field))) 

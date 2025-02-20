@@ -57,8 +57,15 @@ def cached_request(cache_key: Optional[str] = None):
                 identifier = path if path else 'root'
                 identifier = identifier.replace('/', '_')
             
-            # Try to load from cache first if caching is enabled
-            if (hasattr(self, 'cache_config') and 
+            # Check if we should use live data
+            if not hasattr(self, 'cache_config'):
+                force_live = True  # No cache config means always live
+            else:
+                force_live = self.cache_config.should_use_live(self.name())
+            
+            # Try to load from cache first if caching is enabled and we're not forcing live
+            if (not force_live and
+                hasattr(self, 'cache_config') and 
                 hasattr(self, 'cache_manager') and 
                 self.cache_config.is_cache_enabled(self.name())):
                 try:
@@ -69,18 +76,11 @@ def cached_request(cache_key: Optional[str] = None):
                 except CacheError as e:
                     # If cache doesn't exist and we're not explicitly requesting live data,
                     # raise an error instead of silently falling back
-                    if not self.cache_config.should_use_live(self.name()):
+                    if not force_live:
                         raise CacheMissError(
                             f"Cache miss for {url} and live data fetch not enabled. "
                             "Use --force-live or --live flag if you want to fetch live data."
                         ) from e
-            
-            # Only fetch live data if explicitly enabled
-            if not self.cache_config.should_use_live(self.name()):
-                raise CacheMissError(
-                    f"Cache is disabled for {self.name()} and live data fetch not enabled. "
-                    "Use --force-live or --live flag if you want to fetch live data."
-                )
             
             # Fetch live data
             logger.info(f"Fetching fresh content from {url}")
