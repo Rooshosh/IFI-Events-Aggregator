@@ -35,25 +35,29 @@ class PeoplyScraper(BaseScraper):
         current_time = now_oslo().astimezone(ZoneInfo("UTC"))
         time_str = current_time.strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + 'Z'
         encoded_time = time_str.replace(':', '%3A')
-        return f"{self.base_url}/events?afterDate={encoded_time}&orderBy=startDate"
+        return f"{self.base_url}/events?afterDate={encoded_time}&orderBy=startDate&take=99"
     
     @cached_request(cache_key="events_list")
     def _fetch_json(self, url: str) -> str:
         """Fetch JSON content with caching support"""
         response = requests.get(url, headers=self.headers)
         response.raise_for_status()
-        return response.text  # Return raw response text
+        
+        # Parse and re-format JSON to make it readable
+        data = response.json()
+        return json.dumps(data, indent=2, ensure_ascii=False)  # ensure_ascii=False preserves unicode characters
     
     def get_events(self) -> List[Event]:
         """Get events from peoply.app API"""
         try:
             # Fetch events from API (using cache if available)
-            raw_response = self._fetch_json(self._get_api_url())
+            api_url = self._get_api_url()
+            raw_response = self._fetch_json(api_url)
             api_events = json.loads(raw_response)
             logger.info(f"Found {len(api_events)} events from API")
             
             events = []
-            for api_event in api_events[:10]:  # Limit to 10 most recent events
+            for api_event in api_events:
                 try:
                     # Convert API event to our format
                     event = Event(
@@ -102,3 +106,5 @@ class PeoplyScraper(BaseScraper):
         except Exception as e:
             logger.error(f"Error fetching events from {self.name()}: {e}")
             return [] 
+        
+

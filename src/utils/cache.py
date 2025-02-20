@@ -39,10 +39,23 @@ class CacheManager:
         source_dir.mkdir(parents=True, exist_ok=True)
         return source_dir
     
-    def get_cache_path(self, source_name: str, identifier: str, suffix: str = '.html') -> Path:
-        """Generate a cache file path for a given source and identifier"""
+    def get_cache_path(self, source_name: str, identifier: str, suffix: str = None) -> Path:
+        """
+        Generate a cache file path for a given source and identifier.
+        
+        Args:
+            source_name: Name of the source (e.g., 'peoply.app', 'ifinavet.no')
+            identifier: Unique identifier for the cached content
+            suffix: Optional file extension (e.g., '.html', '.json'). If not provided,
+                   defaults to '.json' for peoply.app and '.html' for other sources.
+        """
         # Clean the identifier to be filesystem-friendly
         clean_id = "".join(c if c.isalnum() or c in '-_' else '_' for c in identifier)
+        
+        # Determine file extension based on source if not provided
+        if suffix is None:
+            suffix = '.json' if source_name == 'peoply.app' else '.html'
+            
         return self.get_source_cache_dir(source_name) / f"{clean_id}{suffix}"
     
     def get_meta_path(self, cache_path: Path) -> Path:
@@ -54,8 +67,10 @@ class CacheManager:
         """Save content to cache with metadata"""
         source_dir = self.get_source_cache_dir(source_name)
         
+        # Get appropriate file path with extension
+        content_file = self.get_cache_path(source_name, identifier)
+        
         # Save content
-        content_file = source_dir / f"{identifier}.html"
         content_file.write_text(content, encoding='utf-8')
         
         # Save metadata
@@ -65,19 +80,20 @@ class CacheManager:
                 'cached_at': datetime.now().isoformat(),
                 'last_accessed': datetime.now().isoformat()
             }
-            meta_file = source_dir / f"{identifier}.meta.json"
+            meta_file = self.get_meta_path(content_file)
             meta_file.write_text(json.dumps(meta, indent=2), encoding='utf-8')
         
         logger.debug(f"Cached content for {source_name}/{identifier}")
     
     def load(self, source_name: str, identifier: str) -> Optional[str]:
         """Load content from cache if it exists"""
-        source_dir = self.get_source_cache_dir(source_name)
-        content_file = source_dir / f"{identifier}.html"
-        meta_file = source_dir / f"{identifier}.meta.json"
+        # Get appropriate file path with extension
+        content_file = self.get_cache_path(source_name, identifier)
+        meta_file = self.get_meta_path(content_file)
         
         # Check if source directory exists and has any cached files
-        if not source_dir.exists() or not any(source_dir.glob('*.html')):
+        source_dir = self.get_source_cache_dir(source_name)
+        if not source_dir.exists() or not any(f for f in source_dir.glob('*.*') if not f.name.endswith('.meta.json')):
             msg = f"No cache found for {source_name} (cache directory empty or not found). To fetch live data, use --force-live flag."
             logger.error(msg)
             raise CacheError(msg)
@@ -111,7 +127,8 @@ class CacheManager:
             if not source_dir.exists():
                 return 0
             
-            for cache_file in source_dir.glob('*.html'):
+            # Find all cache files (both .html and .json, but not .meta.json)
+            for cache_file in (f for f in source_dir.glob('*.*') if not f.name.endswith('.meta.json')):
                 if self._should_clear(cache_file, older_than):
                     self._clear_cache_files(cache_file)
                     cleared_count += 1
@@ -119,7 +136,8 @@ class CacheManager:
             # Clear all sources
             for source_dir in self.cache_dir.iterdir():
                 if source_dir.is_dir():
-                    for cache_file in source_dir.glob('*.html'):
+                    # Find all cache files (both .html and .json, but not .meta.json)
+                    for cache_file in (f for f in source_dir.glob('*.*') if not f.name.endswith('.meta.json')):
                         if self._should_clear(cache_file, older_than):
                             self._clear_cache_files(cache_file)
                             cleared_count += 1
