@@ -1,8 +1,9 @@
 from datetime import datetime, timedelta
 import sqlite3
 import logging
-from typing import Optional, List, Tuple
+from typing import Optional, List, Tuple, Any, Dict, Callable
 from difflib import SequenceMatcher
+from sqlalchemy import inspect, DateTime
 from ..models.event import Event
 
 logger = logging.getLogger(__name__)
@@ -24,6 +25,26 @@ class DuplicateConfig:
         self.require_exact_time = require_exact_time
         self.ignore_case = ignore_case
         self.normalize_whitespace = normalize_whitespace
+
+# Special merge strategies for specific fields
+EVENT_MERGE_STRATEGIES: Dict[str, Callable[[Event, Event], Any]] = {
+    'id': lambda e1, e2: (e1.id if (e1.created_at and e2.created_at and e1.created_at < e2.created_at) 
+                         else (e2.id if e2.created_at else e1.id)),
+    'description': lambda e1, e2: (
+        f"{e1.description}\n\nAlternative description:\n{e2.description}"
+        if (e2.description and e2.description != e1.description)
+        else e1.description
+    ),
+    'start_time': lambda e1, e2: min(e1.start_time, e2.start_time),
+    'end_time': lambda e1, e2: max(e1.end_time, e2.end_time) if (e1.end_time and e2.end_time) else (e1.end_time or e2.end_time),
+    'created_at': lambda e1, e2: min(e1.created_at, e2.created_at) if (e1.created_at and e2.created_at) else (e1.created_at or e2.created_at),
+    'registration_opens': lambda e1, e2: min(e1.registration_opens, e2.registration_opens) if (e1.registration_opens and e2.registration_opens) else (e1.registration_opens or e2.registration_opens),
+    'source_name': lambda e1, e2: (
+        ', '.join([e1.source_name, e2.source_name]) 
+        if (e1.source_name and e2.source_name and e1.source_name != e2.source_name)
+        else (e1.source_name or e2.source_name)
+    )
+}
 
 def normalize_string(text: str, config: DuplicateConfig) -> str:
     """Normalize string based on config"""
@@ -77,57 +98,96 @@ def merge_events(event1: Event, event2: Event) -> Event:
     """
     Merge two events that are considered duplicates.
     Takes the most complete information from both events.
+    
+    This function automatically handles all fields in the Event model,
+    including any that might be added in the future. For each field:
+    - If only one event has the field set, use that value
+    - If both have it set, use a field-specific merge strategy
+    - If neither has it set, leave it as None
     """
-    # Always keep the earlier created event's ID if available
-    id_to_keep = None
-    if event1.created_at and event2.created_at:
-        id_to_keep = event1.id if event1.created_at < event2.created_at else event2.id
-    else:
-        id_to_keep = event1.id or event2.id
+    # Get all column names from the Event model
+    columns = _get_event_columns()
     
-    # Merge descriptions if they're different
-    description = event1.description
-    if event2.description and event2.description != event1.description:
-        description = f"{event1.description}\n\nAlternative description:\n{event2.description}"
+    # Start with a dict to hold merged values
+    merged_values = {}
     
-    # Take the most precise location
-    location = event1.location or event2.location
+    # Process each column
+    for column in columns:
+        if column in EVENT_MERGE_STRATEGIES:
+            # Use special handling for fields that need custom merge logic
+            merged_values[column] = EVENT_MERGE_STRATEGIES[column](event1, event2)
+        else:
+            # Default behavior for all other fields: take first non-None value
+            val1 = getattr(event1, column)
+            val2 = getattr(event2, column)
+            merged_values[column] = val1 if val1 is not None else val2
     
-    # Combine source information
-    source_urls = list(filter(None, [event1.source_url, event2.source_url]))
-    source_names = list(filter(None, [event1.source_name, event2.source_name]))
+    # Create new event with merged values
+    return Event(**merged_values)
+
+def _get_event_columns() -> List[str]:
+    """Get all column names from the Event model"""
+    return [c.key for c in inspect(Event).mapper.column_attrs]
+
+def _get_datetime_columns() -> List[str]:
+    """Get names of all datetime columns from the Event model"""
+    return [c.key for c in inspect(Event).mapper.column_attrs 
+            if isinstance(c.columns[0].type, DateTime)]
+
+def _build_select_query(columns: List[str], where_clause: str = "") -> str:
+    """Build a SELECT query for events"""
+    return f"""
+        SELECT {', '.join(columns)}
+        FROM events
+        {where_clause}
+    """
+
+def _row_to_event(row: Tuple[Any, ...], columns: List[str]) -> Optional[Event]:
+    """Convert a database row to an Event object"""
+    try:
+        # Create dict of column names to values
+        values = {}
+        datetime_columns = _get_datetime_columns()
+        
+        for i, column in enumerate(columns):
+            value = row[i]
+            # Handle datetime fields
+            if value and column in datetime_columns:
+                value = datetime.fromisoformat(value)
+            values[column] = value
+        return Event(**values)
+    except Exception as e:
+        logger.warning(f"Failed to parse event {row[0] if row else 'unknown'}: {e}")
+        return None
+
+def _find_and_merge_duplicates(events: List[Event], config: DuplicateConfig) -> Tuple[List[Event], int]:
+    """
+    Find and merge duplicates in a list of events.
+    Returns (merged_events, duplicate_count).
+    """
+    merged_events = []
+    duplicate_count = 0
+    processed_ids = set()
     
-    # Take the earliest registration opening time
-    registration_opens = None
-    if event1.registration_opens and event2.registration_opens:
-        registration_opens = min(event1.registration_opens, event2.registration_opens)
-    else:
-        registration_opens = event1.registration_opens or event2.registration_opens
+    for i, event1 in enumerate(events):
+        if event1.id in processed_ids:
+            continue
+            
+        current_event = event1
+        for j, event2 in enumerate(events[i+1:], i+1):
+            if event2.id in processed_ids:
+                continue
+                
+            if are_events_duplicate(current_event, event2, config):
+                current_event = merge_events(current_event, event2)
+                processed_ids.add(event2.id)
+                duplicate_count += 1
+                logger.info(f"Found duplicate: '{event2.title}' matches '{event1.title}'")
+        
+        merged_events.append(current_event)
+        processed_ids.add(event1.id)
     
-    # Take the first registration URL
-    registration_urls = list(filter(None, [event1.registration_url, event2.registration_url]))
-    
-    # Take the most complete capacity information
-    capacity = event1.capacity or event2.capacity
-    spots_left = event1.spots_left or event2.spots_left
-    food = event1.food or event2.food
-    
-    return Event(
-        id=id_to_keep,
-        title=event1.title,  # Keep the title from the first event
-        description=description,
-        start_time=min(event1.start_time, event2.start_time),
-        end_time=max(event1.end_time, event2.end_time),
-        location=location,
-        source_url=source_urls[0] if source_urls else None,  # Keep first source URL
-        source_name=', '.join(source_names) if len(source_names) > 1 else (source_names[0] if source_names else None),
-        created_at=min(event1.created_at, event2.created_at) if (event1.created_at and event2.created_at) else (event1.created_at or event2.created_at),
-        capacity=capacity,
-        spots_left=spots_left,
-        food=food,
-        registration_opens=registration_opens,
-        registration_url=registration_urls[0] if registration_urls else None
-    )
+    return merged_events, duplicate_count
 
 def deduplicate_database(db_path: str, config: DuplicateConfig = DuplicateConfig()) -> Tuple[int, List[Event]]:
     """
@@ -137,90 +197,43 @@ def deduplicate_database(db_path: str, config: DuplicateConfig = DuplicateConfig
     with sqlite3.connect(db_path) as conn:
         c = conn.cursor()
         
+        # Get all columns and build query
+        columns = _get_event_columns()
+        query = _build_select_query(columns, "ORDER BY created_at ASC")
+        
         # Get all events
-        c.execute('''
-            SELECT id, title, description, start_time, end_time, 
-                   location, source_url, source_name, created_at,
-                   food, capacity, spots_left, registration_opens,
-                   registration_url
-            FROM events
-            ORDER BY created_at ASC
-        ''')
+        c.execute(query)
         
         # Convert to Event objects
         events = []
         for row in c.fetchall():
-            try:
-                events.append(Event(
-                    id=row[0],
-                    title=row[1],
-                    description=row[2],
-                    start_time=datetime.fromisoformat(row[3]),
-                    end_time=datetime.fromisoformat(row[4]) if row[4] else None,
-                    location=row[5],
-                    source_url=row[6],
-                    source_name=row[7],
-                    created_at=datetime.fromisoformat(row[8]) if row[8] else None,
-                    food=row[9],
-                    capacity=row[10],
-                    spots_left=row[11],
-                    registration_opens=datetime.fromisoformat(row[12]) if row[12] else None,
-                    registration_url=row[13]
-                ))
-            except Exception as e:
-                logger.warning(f"Failed to parse event {row[0]}: {e}")
-                continue
+            event = _row_to_event(row, columns)
+            if event:
+                events.append(event)
         
         # Find and merge duplicates
-        merged_events = []
-        duplicate_count = 0
-        processed_ids = set()
-        
-        for i, event1 in enumerate(events):
-            if event1.id in processed_ids:
-                continue
-                
-            current_event = event1
-            for j, event2 in enumerate(events[i+1:], i+1):
-                if event2.id in processed_ids:
-                    continue
-                    
-                if are_events_duplicate(current_event, event2, config):
-                    current_event = merge_events(current_event, event2)
-                    processed_ids.add(event2.id)
-                    duplicate_count += 1
-                    logger.info(f"Found duplicate: '{event2.title}' matches '{event1.title}'")
-            
-            merged_events.append(current_event)
-            processed_ids.add(event1.id)
+        merged_events, duplicate_count = _find_and_merge_duplicates(events, config)
         
         # Update database with merged events
         c.execute('DELETE FROM events')
         
+        # Build insert query using same columns
+        placeholders = ', '.join(['?' for _ in columns])
+        insert_query = f"""
+            INSERT INTO events ({', '.join(columns)})
+            VALUES ({placeholders})
+        """
+        
+        # Insert merged events
         for event in merged_events:
-            c.execute('''
-                INSERT INTO events (
-                    id, title, description, start_time, end_time,
-                    location, source_url, source_name, created_at,
-                    food, capacity, spots_left, registration_opens,
-                    registration_url
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ''', (
-                event.id,
-                event.title,
-                event.description,
-                event.start_time.isoformat(),
-                event.end_time.isoformat() if event.end_time else None,
-                event.location,
-                event.source_url,
-                event.source_name,
-                event.created_at.isoformat() if event.created_at else None,
-                event.food,
-                event.capacity,
-                event.spots_left,
-                event.registration_opens.isoformat() if event.registration_opens else None,
-                event.registration_url
-            ))
+            values = []
+            for column in columns:
+                value = getattr(event, column)
+                # Convert datetime to string
+                if isinstance(value, datetime):
+                    value = value.isoformat()
+                values.append(value)
+            c.execute(insert_query, values)
         
         conn.commit()
         
@@ -239,38 +252,19 @@ def check_duplicate_before_insert(new_event: Event, db_path: str, config: Duplic
         start_time_min = (new_event.start_time - time_window).isoformat()
         start_time_max = (new_event.start_time + time_window).isoformat()
         
-        c.execute('''
-            SELECT id, title, description, start_time, end_time,
-                   location, source_url, source_name, created_at,
-                   food, capacity, spots_left, registration_opens,
-                   registration_url
-            FROM events
-            WHERE start_time BETWEEN ? AND ?
-        ''', (start_time_min, start_time_max))
+        # Get all columns and build query
+        columns = _get_event_columns()
+        query = _build_select_query(
+            columns,
+            "WHERE start_time BETWEEN ? AND ?"
+        )
         
+        c.execute(query, (start_time_min, start_time_max))
+        
+        # Check each potential duplicate
         for row in c.fetchall():
-            try:
-                existing_event = Event(
-                    id=row[0],
-                    title=row[1],
-                    description=row[2],
-                    start_time=datetime.fromisoformat(row[3]),
-                    end_time=datetime.fromisoformat(row[4]) if row[4] else None,
-                    location=row[5],
-                    source_url=row[6],
-                    source_name=row[7],
-                    created_at=datetime.fromisoformat(row[8]) if row[8] else None,
-                    food=row[9],
-                    capacity=row[10],
-                    spots_left=row[11],
-                    registration_opens=datetime.fromisoformat(row[12]) if row[12] else None,
-                    registration_url=row[13]
-                )
-                
-                if are_events_duplicate(new_event, existing_event, config):
-                    return merge_events(existing_event, new_event)
-            except Exception as e:
-                logger.warning(f"Failed to parse event {row[0]}: {e}")
-                continue
+            existing_event = _row_to_event(row, columns)
+            if existing_event and are_events_duplicate(new_event, existing_event, config):
+                return merge_events(existing_event, new_event)
     
     return None 
