@@ -262,6 +262,14 @@ def clear_database(quiet: bool = False) -> None:
     finally:
         close_db()
 
+def get_all_events() -> List[Event]:
+    """Get all events from the database"""
+    db = get_db()
+    try:
+        return db.query(Event).order_by(Event.start_time.asc()).all()
+    finally:
+        close_db()
+
 def main():
     """Main CLI interface for the events management tool."""
     parser = argparse.ArgumentParser(
@@ -298,12 +306,15 @@ Examples:
   
   # Deduplicate with custom settings
   %(prog)s deduplicate --title-similarity 0.7 --time-window 60
+  
+  # List all events in the database
+  %(prog)s list
         """
     )
     
     parser.add_argument(
         'command',
-        choices=['fetch', 'show', 'clear', 'deduplicate'],
+        choices=['fetch', 'show', 'clear', 'deduplicate', 'list'],
         help='Command to execute'
     )
     
@@ -453,6 +464,15 @@ Examples:
             detailed_output=args.detailed,
             quiet=args.quiet
         )
+    elif args.command == 'list':
+        init_db()  # Initialize database connection
+        events = get_all_events()
+        if not events:
+            logger.error("No events found in the database")
+            return
+        
+        logger.info(f"Found {len(events)} events in database:")
+        print_events_info(events, detailed=args.detailed)
 
 if __name__ == "__main__":
     main() 

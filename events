@@ -1,0 +1,13 @@
+#!/bin/bash
+
+# Get the directory where this script is located
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+
+# Activate virtual environment if it exists
+VENV_ACTIVATE="$SCRIPT_DIR/../venv/bin/activate"
+if [ -f "$VENV_ACTIVATE" ]; then
+    source "$VENV_ACTIVATE"
+fi
+
+# Run the Python script with all arguments passed through
+python "$SCRIPT_DIR/scripts/events.py" "$@" 
