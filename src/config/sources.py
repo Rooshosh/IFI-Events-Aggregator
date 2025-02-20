@@ -25,6 +25,20 @@ SOURCES = {
         base_url='https://ifinavet.no',
         scraper_class='src.scrapers.navet.NavetScraper',
         settings={}
+    ),
+    'facebook': SourceConfig(
+        name='facebook.group',
+        enabled=True,
+        base_url='https://api.brightdata.com/datasets/v3',
+        scraper_class='src.scrapers.facebook.FacebookGroupScraper',
+        settings={
+            'brightdata': {
+                'api_key': 'c31afca61c5b7e52a708ac4d5f6fa75d4a406f8da9c91220283e8a68441531cd',
+                'dataset_id': 'gd_lz11l67o2cb3r0lkj3',
+                'group_url': 'https://www.facebook.com/groups/ifistudenter',
+                'num_posts': 10
+            }
+        }
     )
 }
 
