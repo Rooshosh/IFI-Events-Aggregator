@@ -15,6 +15,21 @@
 
 <!-- Grid View -->
 <div id="grid-view">
+    <!-- Source Filter -->
+    <div class="d-flex justify-content-center mb-3">
+        <div class="source-filter btn-group" role="group" aria-label="Source filter">
+            <button type="button" class="btn btn-outline-secondary active" data-source="all" onclick="filterSource('all')">
+                All Sources
+            </button>
+            <button type="button" class="btn btn-outline-secondary" data-source="peoply.app" onclick="filterSource('peoply.app')">
+                Peoply
+            </button>
+            <button type="button" class="btn btn-outline-secondary" data-source="ifinavet.no" onclick="filterSource('ifinavet.no')">
+                IFI Navet
+            </button>
+        </div>
+    </div>
+
     <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4">
         {% for event in events %}
         <div class="col">
@@ -71,7 +86,7 @@
                     </div>
 
                     <!-- Source information -->
-                    <small class="text-muted d-block mt-2">Source: {{ event.source_name }}</small>
+                    <small class="text-muted source-name d-block mt-2">Source: {{ event.source_name }}</small>
                     {% if event.fetched_at %}
                         <small class="text-muted d-block">Last updated: {{ event.fetched_at.strftime('%Y-%m-%d %H:%M') }}</small>
                     {% endif %}
@@ -105,5 +120,38 @@
         }{% if not loop.last %},{% endif %}
         {% endfor %}
     ];
+</script>
+
+<!-- Add JavaScript for filtering -->
+<script>
+function filterSource(source) {
+    // Update button states
+    document.querySelectorAll('.source-filter .btn').forEach(btn => {
+        btn.classList.remove('active');
+        if (btn.dataset.source === source) {
+            btn.classList.add('active');
+        }
+    });
+
+    // Filter cards in grid view
+    document.querySelectorAll('#grid-view .col').forEach(card => {
+        const sourceElement = card.querySelector('.source-name');
+        const sourceText = sourceElement.textContent.split(': ')[1]; // Get text after "Source: "
+        if (source === 'all' || sourceText === source) {
+            card.style.display = '';
+        } else {
+            card.style.display = 'none';
+        }
+    });
+}
+
+// Add this to the existing window.onload function
+const existingOnload = window.onload;
+window.onload = function() {
+    if (existingOnload) existingOnload();
+    
+    // Initialize source filter
+    filterSource('all');
+};
 </script>
 {% endblock %} 
