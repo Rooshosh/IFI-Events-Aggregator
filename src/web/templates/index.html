@@ -72,6 +72,9 @@
 
                     <!-- Source information -->
                     <small class="text-muted d-block mt-2">Source: {{ event.source_name }}</small>
+                    {% if event.fetched_at %}
+                        <small class="text-muted d-block">Last updated: {{ event.fetched_at.strftime('%Y-%m-%d %H:%M') }}</small>
+                    {% endif %}
                 </div>
             </div>
         </div>
