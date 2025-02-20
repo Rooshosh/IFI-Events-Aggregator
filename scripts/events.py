@@ -312,6 +312,9 @@ Examples:
   
   # Deduplicate with custom settings
   %(prog)s deduplicate --title-similarity 0.7 --time-window 60
+  
+  # List all events in the database
+  %(prog)s list
         """
     )
     
