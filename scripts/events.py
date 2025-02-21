@@ -191,6 +191,10 @@ def fetch_events(
         logging.getLogger('src.db.database').setLevel(logging.WARNING)
         logger.setLevel(logging.WARNING)
     
+    # Force live fetch if snapshot_id is provided
+    if snapshot_id:
+        use_cache = False
+    
     # Configure cache based on parameters
     cache_config = CacheConfig(
         cache_dir=Path(__file__).parent.parent / 'data' / 'cache',
@@ -337,10 +341,8 @@ def clear_database(quiet: bool = False, source: Optional[str] = None) -> None:
         # Build query
         query = db.query(Event)
         if source:
-            # Use consistent source mapping
-            db_source = SOURCE_MAPPING[source]
-            logger.info(f"[Source Debug] Clearing events for source: cli_source={source}, db_source={db_source}")
-            query = query.filter(Event.source_name == db_source)
+            logger.info(f"[Source Debug] Clearing events for source: {source}")
+            query = query.filter(Event.source_name == source)
         
         # Delete events
         count = query.delete()
@@ -567,8 +569,7 @@ def main():
                 
         elif args.command == 'clear':
             for source in sources:
-                db_source = VALID_SOURCES[source]
-                clear_database(quiet=args.quiet, source=db_source)
+                clear_database(quiet=args.quiet, source=VALID_SOURCES[source])
 
         elif args.command == 'deduplicate':
             # Create config from command line arguments

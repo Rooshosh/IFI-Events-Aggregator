@@ -14,6 +14,7 @@ from ..utils.timezone import now_oslo, ensure_oslo_timezone
 from ..config.sources import SOURCES
 from ..utils.llm import init_openai, is_event_post, parse_event_details
 from ..db import get_db
+from sqlalchemy import func
 
 logger = logging.getLogger(__name__)
 
@@ -382,13 +383,55 @@ class FacebookGroupScraper(BaseScraper):
                     logger.info("No valid posts found in response")
                     return []
             
+            # Find the date range of the fetched posts
+            post_dates = []
+            for post in valid_posts:
+                try:
+                    if post.get('date_posted'):
+                        post_date = ensure_oslo_timezone(datetime.fromisoformat(post['date_posted'])).date()
+                        post_dates.append(post_date)
+                except (ValueError, TypeError):
+                    logger.warning(f"Failed to parse date_posted: {post.get('date_posted')}")
+                    continue
+            
+            if not post_dates:
+                logger.warning("No valid dates found in posts")
+                return []
+            
+            # Get the date range
+            start_date = min(post_dates)
+            end_date = max(post_dates)
+            logger.info(f"Posts span from {start_date} to {end_date}")
+            
+            # Get URLs of events we already have in the database for this date range
+            db = get_db()
+            try:
+                # Use date() function on created_at for proper date comparison
+                events = db.query(Event).filter(
+                    Event.source_name == self.name(),
+                    Event.created_at.isnot(None),  # Ensure we have a date
+                    func.date(Event.created_at) >= start_date,
+                    func.date(Event.created_at) <= end_date
+                ).all()
+                known_urls = {event.source_url for event in events if event.source_url}
+            finally:
+                db.close()
+            
+            # Filter out posts we already have in our database
+            new_posts = [post for post in valid_posts if post.get('url') not in known_urls]
+            if len(new_posts) < len(valid_posts):
+                logger.info(f"Filtered out {len(valid_posts) - len(new_posts)} already known posts")
+                if not new_posts:
+                    logger.info("No new posts to process")
+                    return []
+            
             # Get the fetch timestamp
             meta = self.cache_manager.get_metadata(self.name(), 'latest_posts')
             fetch_time = datetime.fromisoformat(meta['cached_at']) if meta else now_oslo()
             
-            # Parse posts into events
+            # Parse posts into events (only new ones)
             events = []
-            for post in valid_posts:
+            for post in new_posts:
                 try:
                     event = self._parse_post_to_event(post)
                     if event:
@@ -399,7 +442,7 @@ class FacebookGroupScraper(BaseScraper):
                     logger.error(f"Error parsing post: {e}")
                     continue
             
-            logger.info(f"Found {len(events)} events in {len(valid_posts)} posts")
+            logger.info(f"Found {len(events)} new events in {len(new_posts)} new posts")
             return events
             
         except Exception as e:
