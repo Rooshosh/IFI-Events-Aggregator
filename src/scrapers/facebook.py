@@ -226,14 +226,22 @@ class FacebookGroupScraper(BaseScraper):
         """
         # First check if this is an event post
         content = post.get('content', '')
-        is_event, explanation = is_event_post(content, self.openai_config)
+        
+        # Add post date for correct date interpretation
+        enriched_content = (
+            f"Post metadata:\n"
+            f"- Posted on: {post.get('date_posted', '')}\n"
+            f"\nPost content:\n{content}"
+        )
+        
+        is_event, explanation = is_event_post(enriched_content, self.openai_config)
         
         if not is_event:
             logger.debug(f"Post not detected as event: {explanation}")
             return None
         
-        # Parse event details
-        event_data = parse_event_details(content, post.get('url', ''), self.openai_config)
+        # Parse event details with enriched content
+        event_data = parse_event_details(enriched_content, post.get('url', ''), self.openai_config)
         if not event_data:
             logger.error("Failed to parse event details")
             return None
@@ -244,7 +252,11 @@ class FacebookGroupScraper(BaseScraper):
             start_time = ensure_oslo_timezone(datetime.fromisoformat(event_data['start_time']))
             end_time = None
             if event_data.get('end_time'):
-                end_time = ensure_oslo_timezone(datetime.fromisoformat(event_data['end_time']))
+                try:
+                    end_time = ensure_oslo_timezone(datetime.fromisoformat(event_data['end_time']))
+                except (ValueError, TypeError):
+                    # If end_time is invalid, keep it as None
+                    end_time = None
             
             event = Event(
                 title=event_data['title'],
