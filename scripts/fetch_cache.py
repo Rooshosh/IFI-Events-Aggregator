@@ -1,5 +1,45 @@
 #!/usr/bin/env python3
 
+"""
+IFI Events Cache Testing Tool
+
+This script is a testing and debugging tool focused on the caching system and raw data fetching.
+Unlike events.py which handles the complete event management pipeline, this script is designed
+for testing and debugging the data fetching and caching layers in isolation.
+
+Key Features:
+- Test raw data fetching from sources without database integration
+- Verify caching behavior
+- Debug source-specific scraping issues
+- View raw data before event parsing
+
+Source-Specific Features:
+- Facebook: 
+  * Test snapshot creation and retrieval
+  * Configure wait times for scraping
+  * View raw post content
+  * Use existing snapshots
+- Navet: Test HTML scraping and caching
+- Peoply: Test API responses and caching
+
+Usage:
+    # Test Facebook scraping with new snapshot
+    python scripts/fetch_cache.py facebook --live
+
+    # Use existing snapshot
+    python scripts/fetch_cache.py facebook --snapshot-id s_abc123
+
+    # Debug Facebook scraping
+    python scripts/fetch_cache.py facebook --snapshot-id s_abc123 --debug
+
+Related Scripts:
+- events.py: Main event management tool that handles the complete pipeline
+            including database storage and event management
+
+Note: This script is primarily for development and debugging. For production
+event management, use events.py instead.
+"""
+
 import logging
 import sys
 from pathlib import Path

@@ -10,8 +10,9 @@ from .base import BaseScraper
 from ..models.event import Event
 from ..utils.cache import CacheManager, CacheConfig, CacheError
 from ..utils.decorators import cached_request
-from ..utils.timezone import now_oslo
+from ..utils.timezone import now_oslo, ensure_oslo_timezone
 from ..config.sources import SOURCES
+from ..utils.llm import init_openai, is_event_post, parse_event_details
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +29,7 @@ class FacebookGroupScraper(BaseScraper):
         # Get configuration from sources
         config = SOURCES['facebook']
         brightdata_config = config.settings['brightdata']
+        openai_config = config.settings['openai']
         
         self.base_url = config.base_url
         self.headers = {
@@ -46,6 +48,10 @@ class FacebookGroupScraper(BaseScraper):
         self.max_poll_attempts = 20  # Up to ~11.5 minutes total (90s + 19*30s)
         self.poll_interval = 30  # seconds
         self.initial_wait = 90  # seconds
+        
+        # Initialize OpenAI client (without caching)
+        init_openai(openai_config['api_key'])
+        self.openai_config = openai_config
     
     def name(self) -> str:
         """Return the name of the scraper."""
@@ -218,8 +224,51 @@ class FacebookGroupScraper(BaseScraper):
         Use LLM to parse a Facebook post into an Event object.
         Returns None if the post is not about an event.
         """
-        # TODO: Implement LLM parsing
-        pass
+        # First check if this is an event post
+        content = post.get('content', '')
+        is_event, explanation = is_event_post(content, self.openai_config)
+        
+        if not is_event:
+            logger.debug(f"Post not detected as event: {explanation}")
+            return None
+        
+        # Parse event details
+        event_data = parse_event_details(content, post.get('url', ''), self.openai_config)
+        if not event_data:
+            logger.error("Failed to parse event details")
+            return None
+            
+        # Create Event object
+        try:
+            # Convert datetime strings to datetime objects with timezone
+            start_time = ensure_oslo_timezone(datetime.fromisoformat(event_data['start_time']))
+            end_time = None
+            if event_data.get('end_time'):
+                end_time = ensure_oslo_timezone(datetime.fromisoformat(event_data['end_time']))
+            
+            event = Event(
+                title=event_data['title'],
+                description=event_data['description'],
+                start_time=start_time,
+                end_time=end_time,
+                location=event_data.get('location'),
+                source_url=post.get('url', ''),
+                source_name=self.name()
+            )
+            
+            # Add food info to description if available
+            if event_data.get('food'):
+                event.description += f"\n\nServering: {event_data['food']}"
+            
+            # Add registration info to description if available
+            if event_data.get('registration_info'):
+                event.description += f"\n\nPåmelding: {event_data['registration_info']}"
+            
+            return event
+            
+        except Exception as e:
+            logger.error(f"Error creating Event object: {e}")
+            return None
     
     def get_events(self, snapshot_id: str = None) -> List[Event]:
         """Get events from Facebook group posts."""

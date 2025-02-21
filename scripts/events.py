@@ -5,14 +5,26 @@ IFI Events Management Tool
 
 This script provides a command-line interface for managing events in the IFI Events Aggregator.
 It handles:
-- Fetching events from different sources (Navet, Peoply)
+- Fetching events from different sources (Navet, Peoply, Facebook)
 - Caching of raw API/web responses (to minimize calls to sources)
 - Parsing events into our format
 - Database storage of parsed events
+- Event deduplication and management
 
 Cache vs Database:
 - Cache: Stores raw responses from APIs/web scraping to minimize calls to sources
 - Database: Stores parsed events in our format for the web interface
+
+Source-Specific Features:
+- Facebook: Supports using existing snapshot IDs to avoid re-scraping
+         Configurable wait times for scraping
+         Debug mode to view raw posts
+- Navet: HTML scraping with caching
+- Peoply: API-based with caching
+
+Related Scripts:
+- fetch_cache.py: Testing tool focused on the caching system and raw data fetching
+                 Useful for debugging scraping issues before database integration
 
 For usage information, run:
     python events.py --help
@@ -26,16 +38,23 @@ Common use cases:
 
     # Just view events without storing in database
     python events.py fetch --no-store
+
+    # Fetch Facebook events using existing snapshot
+    python events.py fetch facebook --snapshot-id s_abc123 --detailed
+
+    # Debug Facebook scraping
+    python events.py fetch facebook --snapshot-id s_abc123 --debug --no-store
 """
 
 import logging
 import sys
 from pathlib import Path
 import argparse
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from datetime import datetime
 from zoneinfo import ZoneInfo
 from sqlalchemy import text
+import json
 
 # Add src directory to Python path
 sys.path.append(str(Path(__file__).parent.parent))
@@ -43,6 +62,7 @@ sys.path.append(str(Path(__file__).parent.parent))
 from src.db import init_db, get_db, close_db
 from src.scrapers.navet import NavetScraper
 from src.scrapers.peoply import PeoplyScraper
+from src.scrapers.facebook import FacebookGroupScraper
 from src.utils.cache import CacheConfig
 from src.models.event import Event
 from src.utils.timezone import now_oslo
@@ -63,7 +83,7 @@ def get_scraper(source: str, cache_config: CacheConfig):
     Get a scraper instance for the specified source.
     
     Args:
-        source: Source identifier ('navet' or 'peoply')
+        source: Source identifier ('navet', 'peoply', or 'facebook')
         cache_config: Configuration for the cache behavior
     
     Returns:
@@ -76,6 +96,8 @@ def get_scraper(source: str, cache_config: CacheConfig):
         return NavetScraper(cache_config=cache_config)
     elif source == 'peoply':
         return PeoplyScraper(cache_config=cache_config)
+    elif source == 'facebook':
+        return FacebookGroupScraper(cache_config=cache_config)
     else:
         raise ValueError(f"Unknown source: {source}")
 
@@ -91,23 +113,39 @@ def get_all_scrapers(cache_config: CacheConfig):
     """
     return [
         PeoplyScraper(cache_config=cache_config),
-        NavetScraper(cache_config=cache_config)
+        NavetScraper(cache_config=cache_config),
+        FacebookGroupScraper(cache_config=cache_config)
     ]
 
-def print_events_info(events: List[Event], detailed: bool = False):
+def print_events_info(events: List[Event], detailed: bool = False, source: Optional[str] = None, debug: bool = False):
     """
     Print information about events.
     
     Args:
         events: List of events to display
-        detailed: If True, shows all available event information.
-                 If False, shows only count.
+        detailed: If True, shows all available event information
+        source: Source of the events (for source-specific handling)
+        debug: If True, shows additional debug information
     """
     logger.info(f"Found {len(events)} events")
     
     if detailed:
         for event in events:
             logger.info(event.to_detailed_string())
+            
+    # Show raw Facebook posts in debug mode
+    if debug and source == 'facebook':
+        scraper = FacebookGroupScraper(CacheConfig())
+        try:
+            posts_json = scraper._fetch_posts()
+            posts = json.loads(posts_json)
+            logger.info("\nRaw Facebook posts:")
+            for post in posts:
+                logger.info("-" * 80)
+                logger.info(f"Post content: {post.get('content', 'No content')[:200]}...")
+                logger.info(f"Post URL: {post.get('url', 'No URL')}")
+        except Exception as e:
+            logger.error(f"Error showing raw posts: {e}")
     else:
         for event in events:
             logger.info(event.to_summary_string())
@@ -117,16 +155,13 @@ def fetch_events(
     use_cache: bool = True,
     store_db: bool = True,
     detailed_output: bool = False,
-    quiet: bool = False
+    quiet: bool = False,
+    snapshot_id: Optional[str] = None,
+    debug: bool = False,
+    facebook_config: Optional[Dict[str, Any]] = None
 ) -> List[Event]:
     """
     Fetch events from specified source(s).
-    
-    This function handles:
-    - Fetching events from one or all sources
-    - Using cached or live data (always updates cache with live data)
-    - Storing events in database (default behavior)
-    - Displaying event information
     
     Args:
         source: Specific source to fetch from, or None for all sources
@@ -134,9 +169,9 @@ def fetch_events(
         store_db: Whether to store events in database (default True)
         detailed_output: Whether to print detailed event information
         quiet: Whether to reduce output verbosity
-    
-    Returns:
-        List of fetched events
+        snapshot_id: Optional snapshot ID for Facebook scraper
+        debug: Whether to show debug information
+        facebook_config: Optional configuration for Facebook scraper
     """
     # Set logging levels based on quiet mode
     if quiet:
@@ -148,7 +183,7 @@ def fetch_events(
     # Configure cache based on parameters
     cache_config = CacheConfig(
         cache_dir=Path(__file__).parent.parent / 'data' / 'cache',
-        enabled_sources=['peoply.app', 'ifinavet.no'],
+        enabled_sources=['peoply.app', 'ifinavet.no', 'facebook.group'],
         force_live=not use_cache
     )
     
@@ -170,7 +205,17 @@ def fetch_events(
                 elif not quiet:
                     logger.info(f"Using cached data for {scraper.name()}")
                 
-                events = scraper.get_events()
+                # Handle Facebook scraper differently due to snapshot support
+                if isinstance(scraper, FacebookGroupScraper):
+                    # Configure Facebook scraper if settings provided
+                    if facebook_config:
+                        scraper.initial_wait = facebook_config.get('initial_wait', scraper.initial_wait)
+                        scraper.poll_interval = facebook_config.get('poll_interval', scraper.poll_interval)
+                        scraper.max_poll_attempts = facebook_config.get('max_attempts', scraper.max_poll_attempts)
+                    events = scraper.get_events(snapshot_id=snapshot_id)
+                else:
+                    events = scraper.get_events()
+                
                 if not quiet:
                     logger.info(f"Found {len(events)} events from {scraper.name()}")
                 all_events.extend(events)
@@ -196,6 +241,10 @@ def fetch_events(
                                   f"({total_stored} new, {total_merged} merged)")
                 elif not quiet:
                     logger.info("Events were not stored in database (--no-store flag used)")
+                
+                # Print detailed information if requested
+                if detailed_output and not quiet:
+                    print_events_info(events, detailed=True, source=source, debug=debug)
             
             except Exception as e:
                 logger.error(f"Error processing events from {scraper.name()}: {e}")
@@ -204,10 +253,6 @@ def fetch_events(
         # Commit changes if we're storing events
         if store_db:
             db.commit()
-        
-        # Print detailed information if requested
-        if detailed_output and not quiet:
-            print_events_info(all_events, detailed=True)
         
         # Always show total summary, even in quiet mode
         if store_db:
@@ -271,116 +316,90 @@ def get_all_events() -> List[Event]:
         close_db()
 
 def main():
-    """Main CLI interface for the events management tool."""
+    """Main entry point for the script"""
     parser = argparse.ArgumentParser(
         description='IFI Events management tool',
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-Examples:
+        epilog="""Examples:
   # Fetch and store all events (using cache by default)
-  %(prog)s fetch
+  events.py fetch
   
   # Force fresh data fetch (will update cache and store in DB)
-  %(prog)s fetch --live
+  events.py fetch --live
   
   # Just view events without storing in database
-  %(prog)s fetch --no-store
+  events.py fetch --no-store
   
   # View detailed event information
-  %(prog)s fetch --detailed
+  events.py fetch --detailed
   
   # View a specific event by ID
-  %(prog)s show 1
+  events.py show 1
   
   # View a random event
-  %(prog)s show r
+  events.py show r
   
   # View the next upcoming event
-  %(prog)s show n
+  events.py show n
   
   # Clear all events from database
-  %(prog)s clear
+  events.py clear
   
   # Deduplicate events in database
-  %(prog)s deduplicate
+  events.py deduplicate
   
   # Deduplicate with custom settings
-  %(prog)s deduplicate --title-similarity 0.7 --time-window 60
+  events.py deduplicate --title-similarity 0.7 --time-window 60
   
   # List all events in the database
-  %(prog)s list
+  events.py list
+  
+  # Fetch Facebook events using an existing snapshot ID
+  events.py fetch facebook --snapshot-id s_abc123
+  
+  # Fetch Facebook events with custom settings
+  events.py fetch facebook --snapshot-id s_abc123 --initial-wait 60 --poll-interval 20
         """
     )
     
-    parser.add_argument(
-        'command',
-        choices=['fetch', 'show', 'clear', 'deduplicate', 'list'],
-        help='Command to execute'
-    )
+    parser.add_argument('command', choices=['fetch', 'show', 'clear', 'deduplicate', 'list'],
+                      help='Command to execute')
+    parser.add_argument('event_id', nargs='?',
+                      help='Event ID to show (required for show command). Use "r" for random event or "n" for next upcoming event')
     
-    parser.add_argument(
-        'event_id',
-        type=str,
-        nargs='?',
-        help='Event ID to show (required for show command). Use "r" for random event or "n" for next upcoming event'
-    )
+    # Add source argument with facebook as an option
+    parser.add_argument('--source', choices=['navet', 'peoply', 'facebook'],
+                      help='Specific source to fetch from (default: all sources)')
+    parser.add_argument('--live', action='store_true',
+                      help='Force live data fetch (will update cache)')
+    parser.add_argument('--no-store', action='store_true',
+                      help='Do not store events in database (view only)')
+    parser.add_argument('--detailed', action='store_true',
+                      help='Show detailed information about events')
+    parser.add_argument('--quiet', action='store_true',
+                      help='Reduce output verbosity')
     
-    parser.add_argument(
-        '--source',
-        choices=['navet', 'peoply'],
-        help='Specific source to fetch from (default: all sources)'
-    )
+    # Add Facebook-specific arguments
+    parser.add_argument('--snapshot-id',
+                      help='Use an existing snapshot ID for Facebook scraper')
+    parser.add_argument('--initial-wait', type=int, default=90,
+                      help='Initial wait time in seconds for Facebook scraper (default: 90)')
+    parser.add_argument('--poll-interval', type=int, default=30,
+                      help='Poll interval in seconds for Facebook scraper (default: 30)')
+    parser.add_argument('--max-attempts', type=int, default=20,
+                      help='Maximum number of polling attempts for Facebook scraper (default: 20)')
+    parser.add_argument('--debug', action='store_true',
+                      help='Show debug information (includes raw posts for Facebook)')
     
-    parser.add_argument(
-        '--live',
-        action='store_true',
-        help='Force live data fetch (will update cache)'
-    )
-    
-    parser.add_argument(
-        '--no-store',
-        action='store_true',
-        help='Do not store events in database (view only)'
-    )
-    
-    parser.add_argument(
-        '--detailed',
-        action='store_true',
-        help='Show detailed information about events'
-    )
-    
-    parser.add_argument(
-        '--quiet',
-        action='store_true',
-        help='Reduce output verbosity'
-    )
-    
-    # Add deduplication-specific arguments
-    parser.add_argument(
-        '--title-similarity',
-        type=float,
-        default=0.85,
-        help='Title similarity threshold (0-1, default: 0.85)'
-    )
-    
-    parser.add_argument(
-        '--time-window',
-        type=int,
-        default=120,
-        help='Time window in minutes for considering events duplicates (default: 120)'
-    )
-    
-    parser.add_argument(
-        '--require-location',
-        action='store_true',
-        help='Require location to match for duplicate detection'
-    )
-    
-    parser.add_argument(
-        '--require-exact-time',
-        action='store_true',
-        help='Require exact time match for duplicate detection'
-    )
+    # Add deduplication arguments
+    parser.add_argument('--title-similarity', type=float, default=0.85,
+                      help='Title similarity threshold (0-1, default: 0.85)')
+    parser.add_argument('--time-window', type=int, default=120,
+                      help='Time window in minutes for considering events duplicates (default: 120)')
+    parser.add_argument('--require-location', action='store_true',
+                      help='Require location to match for duplicate detection')
+    parser.add_argument('--require-exact-time', action='store_true',
+                      help='Require exact time match for duplicate detection')
     
     args = parser.parse_args()
     
@@ -457,12 +476,25 @@ Examples:
     elif args.command == 'fetch':
         if not args.no_store:
             init_db()
+            
+        # Prepare Facebook configuration if needed
+        facebook_config = None
+        if args.source == 'facebook':
+            facebook_config = {
+                'initial_wait': args.initial_wait,
+                'poll_interval': args.poll_interval,
+                'max_attempts': args.max_attempts
+            }
+            
         fetch_events(
             source=args.source,
             use_cache=not args.live,
             store_db=not args.no_store,
             detailed_output=args.detailed,
-            quiet=args.quiet
+            quiet=args.quiet,
+            snapshot_id=args.snapshot_id,
+            debug=args.debug,
+            facebook_config=facebook_config
         )
     elif args.command == 'list':
         init_db()  # Initialize database connection
