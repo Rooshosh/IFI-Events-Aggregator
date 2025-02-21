@@ -18,7 +18,7 @@ class SourceConfig:
 # OpenAI configuration for event parsing
 OPENAI_CONFIG = {
     'api_key': os.getenv('OPENAI_API_KEY'),  # OpenAI API key from environment
-    'model': os.getenv('OPENAI_MODEL', 'gpt-4o-mini'),  # Model that works with the API
+    'model': 'gpt-4o-mini',  # Model that works with the API
     'temperature': 0.3,  # Lower temperature for more consistent outputs
     'max_tokens': 1000
 }
@@ -47,9 +47,9 @@ SOURCES = {
         settings={
             'brightdata': {
                 'api_key': os.getenv('BRIGHTDATA_API_KEY'),
-                'dataset_id': os.getenv('BRIGHTDATA_DATASET_ID'),
-                'group_url': os.getenv('FACEBOOK_GROUP_URL', 'https://www.facebook.com/groups/ifistudenter'),
-                'num_posts': int(os.getenv('FACEBOOK_NUM_POSTS', '10'))
+                'dataset_id': 'gd_lz11l67o2cb3r0lkj3',  # Brightdata dataset identifier
+                'group_url': 'https://www.facebook.com/groups/ifistudenter',
+                'num_posts': 10
             },
             'openai': OPENAI_CONFIG
         }
