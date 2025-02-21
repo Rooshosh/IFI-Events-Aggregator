@@ -45,6 +45,16 @@ EVENT_MERGE_STRATEGIES: Dict[str, Callable[[Event, Event], Any]] = {
         ', '.join([e1.source_name, e2.source_name]) 
         if (e1.source_name and e2.source_name and e1.source_name != e2.source_name)
         else (e1.source_name or e2.source_name)
+    ),
+    'attachments': lambda e1, e2: (
+        list(set(e1.attachments or []) | set(e2.attachments or []))  # Combine unique attachments from both events
+        if (e1.attachments or e2.attachments)
+        else []
+    ),
+    'author': lambda e1, e2: (
+        f"{e1.author}, {e2.author}"
+        if (e1.author and e2.author and e1.author != e2.author)
+        else (e1.author or e2.author)
     )
 }
 
