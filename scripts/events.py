@@ -78,6 +78,14 @@ logger = logging.getLogger(__name__)
 for module in ['src.scrapers.peoply', 'src.scrapers.navet', 'src.db.database']:
     logging.getLogger(module).setLevel(logging.INFO)
 
+# Add after imports, before main()
+VALID_SOURCES = {
+    'facebook': 'facebook.group',
+    'navet': 'ifinavet.no',
+    'peoply': 'peoply.app',
+    'all': None  # Special case handled in code
+}
+
 def get_scraper(source: str, cache_config: CacheConfig):
     """
     Get a scraper instance for the specified source.
@@ -351,17 +359,23 @@ def main():
         description='IFI Events management tool',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""Examples:
-  # Fetch and store all events (using cache by default)
-  events.py fetch
+  # Fetch events from a specific source
+  events.py fetch facebook
   
-  # Force fresh data fetch (will update cache and store in DB)
-  events.py fetch --live
+  # Fetch from all sources
+  events.py fetch all
   
-  # Just view events without storing in database
-  events.py fetch --no-store
+  # List events from a specific source
+  events.py list navet
   
-  # View detailed event information
-  events.py fetch --detailed
+  # List all events
+  events.py list all
+  
+  # Clear events from a specific source
+  events.py clear facebook
+  
+  # Clear all events
+  events.py clear all
   
   # View a specific event by ID
   events.py show 1
@@ -372,70 +386,68 @@ def main():
   # View the next upcoming event
   events.py show n
   
-  # Clear all events from database
-  events.py clear
-  
   # Deduplicate events in database
   events.py deduplicate
   
   # Deduplicate with custom settings
   events.py deduplicate --title-similarity 0.7 --time-window 60
-  
-  # List all events in the database
-  events.py list
-  
-  # Fetch Facebook events using an existing snapshot ID
-  events.py fetch facebook --snapshot-id s_abc123
-  
-  # Fetch Facebook events with custom settings
-  events.py fetch facebook --snapshot-id s_abc123 --initial-wait 60 --poll-interval 20
         """
     )
     
-    parser.add_argument('command', choices=['fetch', 'show', 'clear', 'deduplicate', 'list'],
-                      help='Command to execute')
-    parser.add_argument('event_id', nargs='?',
-                      help='Event ID to show (required for show command). Use "r" for random event or "n" for next upcoming event')
+    subparsers = parser.add_subparsers(dest='command', help='Command to execute')
     
-    # Add source argument with facebook as an option
-    parser.add_argument('--source', choices=['navet', 'peoply', 'facebook'],
-                      help='Specific source to fetch from (default: all sources)')
-    parser.add_argument('--live', action='store_true',
-                      help='Force live data fetch (will update cache)')
-    parser.add_argument('--no-store', action='store_true',
-                      help='Do not store events in database (view only)')
-    parser.add_argument('--detailed', action='store_true',
-                      help='Show detailed information about events')
-    parser.add_argument('--quiet', action='store_true',
-                      help='Reduce output verbosity')
+    # Source-dependent commands (fetch, list, clear)
+    fetch_parser = subparsers.add_parser('fetch', help='Fetch events from source')
+    fetch_parser.add_argument('source', choices=list(VALID_SOURCES.keys()),
+                            help='Source to fetch from (use "all" for all sources)')
+    fetch_parser.add_argument('--live', action='store_true',
+                            help='Force live data fetch (will update cache)')
+    fetch_parser.add_argument('--no-store', action='store_true',
+                            help='Do not store events in database (view only)')
+    fetch_parser.add_argument('--detailed', action='store_true',
+                            help='Show detailed information about events')
+    fetch_parser.add_argument('--quiet', action='store_true',
+                            help='Reduce output verbosity')
+    fetch_parser.add_argument('--snapshot-id',
+                            help='Use an existing snapshot ID for Facebook scraper')
+    fetch_parser.add_argument('--debug', action='store_true',
+                            help='Show debug information')
     
-    # Add Facebook-specific arguments
-    parser.add_argument('--snapshot-id',
-                      help='Use an existing snapshot ID for Facebook scraper')
-    parser.add_argument('--initial-wait', type=int, default=90,
-                      help='Initial wait time in seconds for Facebook scraper (default: 90)')
-    parser.add_argument('--poll-interval', type=int, default=30,
-                      help='Poll interval in seconds for Facebook scraper (default: 30)')
-    parser.add_argument('--max-attempts', type=int, default=20,
-                      help='Maximum number of polling attempts for Facebook scraper (default: 20)')
-    parser.add_argument('--debug', action='store_true',
-                      help='Show debug information (includes raw posts for Facebook)')
+    list_parser = subparsers.add_parser('list', help='List events from database')
+    list_parser.add_argument('source', choices=list(VALID_SOURCES.keys()),
+                           help='Source to list (use "all" for all sources)')
+    list_parser.add_argument('--detailed', action='store_true',
+                           help='Show detailed information about events')
     
-    # Add deduplication arguments
-    parser.add_argument('--title-similarity', type=float, default=0.85,
-                      help='Title similarity threshold (0-1, default: 0.85)')
-    parser.add_argument('--time-window', type=int, default=120,
-                      help='Time window in minutes for considering events duplicates (default: 120)')
-    parser.add_argument('--require-location', action='store_true',
-                      help='Require location to match for duplicate detection')
-    parser.add_argument('--require-exact-time', action='store_true',
-                      help='Require exact time match for duplicate detection')
+    clear_parser = subparsers.add_parser('clear', help='Clear events from database')
+    clear_parser.add_argument('source', choices=list(VALID_SOURCES.keys()),
+                            help='Source to clear (use "all" for all sources)')
+    clear_parser.add_argument('--quiet', action='store_true',
+                            help='Reduce output verbosity')
+    
+    # Source-independent commands (show, deduplicate)
+    show_parser = subparsers.add_parser('show', help='Show specific event')
+    show_parser.add_argument('event_id',
+                           help='Event ID to show (use "r" for random event or "n" for next upcoming event)')
+    
+    dedup_parser = subparsers.add_parser('deduplicate', help='Deduplicate events in database')
+    dedup_parser.add_argument('--title-similarity', type=float, default=0.85,
+                           help='Title similarity threshold (0-1, default: 0.85)')
+    dedup_parser.add_argument('--time-window', type=int, default=120,
+                           help='Time window in minutes for considering events duplicates (default: 120)')
+    dedup_parser.add_argument('--require-location', action='store_true',
+                           help='Require location to match for duplicate detection')
+    dedup_parser.add_argument('--require-exact-time', action='store_true',
+                           help='Require exact time match for duplicate detection')
     
     args = parser.parse_args()
     
-    if args.command == 'clear':
-        clear_database(quiet=args.quiet, source=args.source)
-    elif args.command == 'show':
+    if not args.command:
+        parser.print_help()
+        return
+    
+    # Handle source-independent commands first
+    if args.command == 'show':
         if args.event_id is None:
             parser.error(
                 "The show command requires an argument:\n"
@@ -477,6 +489,7 @@ def main():
             logger.info(event.to_summary_string())
             logger.info("\nDetailed view:")
             logger.info(event.to_detailed_string())
+            
     elif args.command == 'deduplicate':
         from src.utils.deduplication import deduplicate_database, DuplicateConfig
         
@@ -490,52 +503,64 @@ def main():
         
         # Run deduplication
         db_path = str(Path(__file__).parent.parent / 'events.db')
-        if not args.quiet:
-            logger.info("Starting database deduplication...")
-            logger.info(f"Using settings:")
-            logger.info(f"  - Title similarity threshold: {config.title_similarity_threshold}")
-            logger.info(f"  - Time window: {config.time_window_minutes} minutes")
-            logger.info(f"  - Require location match: {config.require_same_location}")
-            logger.info(f"  - Require exact time: {config.require_exact_time}")
+        logger.info("Starting database deduplication...")
+        logger.info(f"Using settings:")
+        logger.info(f"  - Title similarity threshold: {config.title_similarity_threshold}")
+        logger.info(f"  - Time window: {config.time_window_minutes} minutes")
+        logger.info(f"  - Require location match: {config.require_same_location}")
+        logger.info(f"  - Require exact time: {config.require_exact_time}")
         
         duplicate_count, merged_events = deduplicate_database(db_path, config)
         
-        if not args.quiet:
-            logger.info(f"Found and merged {duplicate_count} duplicate events")
-            logger.info(f"Database now contains {len(merged_events)} unique events")
-    elif args.command == 'fetch':
-        if not args.no_store:
-            init_db()
-            
-        # Prepare Facebook configuration if needed
-        facebook_config = None
-        if args.source == 'facebook':
-            facebook_config = {
-                'initial_wait': args.initial_wait,
-                'poll_interval': args.poll_interval,
-                'max_attempts': args.max_attempts
-            }
-            
-        fetch_events(
-            source=args.source,
-            use_cache=not args.live,
-            store_db=not args.no_store,
-            detailed_output=args.detailed,
-            quiet=args.quiet,
-            snapshot_id=args.snapshot_id,
-            debug=args.debug,
-            facebook_config=facebook_config
-        )
-    elif args.command == 'list':
-        init_db()  # Initialize database connection
-        events = get_all_events(source=args.source)
-        if not events:
-            logger.error("No events found in the database")
-            return
+        logger.info(f"Found and merged {duplicate_count} duplicate events")
+        logger.info(f"Database now contains {len(merged_events)} unique events")
         
-        source_str = f" from {args.source}" if args.source else ""
-        logger.info(f"Found {len(events)} events{source_str} in database:")
-        print_events_info(events, detailed=args.detailed)
+    # Handle source-dependent commands
+    else:
+        # Convert source to list of sources to process
+        sources = list(VALID_SOURCES.keys())[:-1] if args.source == 'all' else [args.source]
+        
+        if args.command == 'fetch':
+            if not args.no_store:
+                init_db()
+            
+            # Prepare Facebook configuration if needed
+            facebook_config = None
+            if 'facebook' in sources:
+                facebook_config = {
+                    'initial_wait': 90,  # Default values since we removed the arguments
+                    'poll_interval': 30,
+                    'max_attempts': 20
+                }
+            
+            for source in sources:
+                fetch_events(
+                    source=source,
+                    use_cache=not args.live,
+                    store_db=not args.no_store,
+                    detailed_output=args.detailed,
+                    quiet=args.quiet,
+                    snapshot_id=args.snapshot_id if source == 'facebook' else None,
+                    debug=args.debug,
+                    facebook_config=facebook_config if source == 'facebook' else None
+                )
+                
+        elif args.command == 'list':
+            init_db()
+            for source in sources:
+                db_source = VALID_SOURCES[source]
+                events = get_all_events(source=db_source)
+                if not events:
+                    logger.error(f"No events found from {source}")
+                    continue
+                
+                logger.info(f"Found {len(events)} events from {source}:")
+                print_events_info(events, detailed=args.detailed)
+                
+        elif args.command == 'clear':
+            for source in sources:
+                db_source = VALID_SOURCES[source]
+                clear_database(quiet=args.quiet, source=db_source)
 
 if __name__ == "__main__":
     main() 
