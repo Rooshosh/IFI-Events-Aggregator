@@ -294,24 +294,54 @@ def get_next_event() -> Optional[Event]:
     finally:
         close_db()
 
-def clear_database(quiet: bool = False) -> None:
-    """Clear all events from the database."""
+def clear_database(quiet: bool = False, source: Optional[str] = None) -> None:
+    """
+    Clear events from the database.
+    
+    Args:
+        quiet: If True, suppress output messages
+        source: Optional source to clear. If None, clears all events.
+    """
     init_db()  # Ensure database is initialized
     db = get_db()
     try:
-        # Delete all events
-        count = db.query(Event).delete()
+        # Build query
+        query = db.query(Event)
+        if source:
+            # Map command line source names to database source names
+            source_mapping = {
+                'facebook': 'facebook.group',
+                'navet': 'ifinavet.no',
+                'peoply': 'peoply.app'
+            }
+            db_source = source_mapping.get(source, source)
+            query = query.filter(Event.source_name == db_source)
+        
+        # Delete events
+        count = query.delete()
         db.commit()
+        
         if not quiet:
-            logger.info(f"Cleared {count} events from database")
+            source_str = f" from {source}" if source else ""
+            logger.info(f"Cleared {count} events{source_str} from database")
     finally:
         close_db()
 
-def get_all_events() -> List[Event]:
-    """Get all events from the database"""
+def get_all_events(source: Optional[str] = None) -> List[Event]:
+    """Get all events from the database, optionally filtered by source"""
     db = get_db()
     try:
-        return db.query(Event).order_by(Event.start_time.asc()).all()
+        query = db.query(Event).order_by(Event.start_time.asc())
+        if source:
+            # Map command line source names to database source names
+            source_mapping = {
+                'facebook': 'facebook.group',
+                'navet': 'ifinavet.no',
+                'peoply': 'peoply.app'
+            }
+            db_source = source_mapping.get(source, source)
+            query = query.filter(Event.source_name == db_source)
+        return query.all()
     finally:
         close_db()
 
@@ -404,7 +434,7 @@ def main():
     args = parser.parse_args()
     
     if args.command == 'clear':
-        clear_database(quiet=args.quiet)
+        clear_database(quiet=args.quiet, source=args.source)
     elif args.command == 'show':
         if args.event_id is None:
             parser.error(
@@ -498,12 +528,13 @@ def main():
         )
     elif args.command == 'list':
         init_db()  # Initialize database connection
-        events = get_all_events()
+        events = get_all_events(source=args.source)
         if not events:
             logger.error("No events found in the database")
             return
         
-        logger.info(f"Found {len(events)} events in database:")
+        source_str = f" from {args.source}" if args.source else ""
+        logger.info(f"Found {len(events)} events{source_str} in database:")
         print_events_info(events, detailed=args.detailed)
 
 if __name__ == "__main__":
