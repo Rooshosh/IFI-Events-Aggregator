@@ -442,14 +442,22 @@
         const eventTime = new Date(dateStr);
         const now = new Date();
         const diffMs = eventTime - now;
-        const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+        const diffDays = diffMs / (1000 * 60 * 60 * 24);
         const diffHours = Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
         
         let longFormat, shortFormat;
         
         if (diffDays > 0) {
-            longFormat = `in ${diffDays} day${diffDays > 1 ? 's' : ''}`;
-            shortFormat = `in ${diffDays}d`;
+            // Special case for tomorrow (between 1 and 2 days)
+            if (diffDays >= 1 && diffDays < 2) {
+                longFormat = 'tomorrow';
+                shortFormat = 'tmrw';
+            } else {
+                // Round up for days
+                const roundedDays = Math.ceil(diffDays);
+                longFormat = `in ${roundedDays} day${roundedDays > 1 ? 's' : ''}`;
+                shortFormat = `in ${roundedDays}d`;
+            }
         } else if (diffHours > 0) {
             longFormat = `in ${diffHours} hour${diffHours > 1 ? 's' : ''}`;
             shortFormat = `in ${diffHours}h`;
