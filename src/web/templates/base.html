@@ -42,14 +42,16 @@
         .fc-event-title {
             font-weight: 500;
         }
-        #grid-view {
+
+        /* Remove direct styling of grid-view and use Bootstrap classes instead */
+        .tab-content {
             width: 100%;
-            display: block;
         }
-        #grid-view .row {
+        .tab-content .row {
             margin-right: 0;
             margin-left: 0;
         }
+
         @media (max-width: 768px) {
             .card-body {
                 padding: 1.25rem;
@@ -255,17 +257,28 @@
             // Update times every minute
             setInterval(updateRelativeTimes, 60000);
 
-            // Initialize calendar if it exists
+            // Initialize calendar
             const calendarEl = document.getElementById('calendar');
-            if (calendarEl && window.calendarEvents) {
-                const calendar = new FullCalendar.Calendar(calendarEl, {
+            if (calendarEl) {
+                window.calendar = new FullCalendar.Calendar(calendarEl, {
                     initialView: 'dayGridMonth',
                     headerToolbar: {
                         left: 'prev,next today',
                         center: 'title',
-                        right: 'dayGridMonth,dayGridWeek'
+                        right: 'dayGridMonth,timeGridWeek,timeGridDay'
                     },
-                    events: window.calendarEvents,
+                    events: window.currentEvents.map(event => ({
+                        title: event.title,
+                        start: event.start,
+                        end: event.end,
+                        url: event.url,
+                        backgroundColor: event.source_name === 'peoply.app' ? '#0d6efd' : '#198754',
+                        extendedProps: {
+                            location: event.location,
+                            food: event.food,
+                            source: event.source_name
+                        }
+                    })),
                     eventClick: function(info) {
                         if (info.event.url) {
                             window.open(info.event.url, '_blank');
@@ -284,8 +297,16 @@
                         info.el.title = tooltip;
                     }
                 });
-                calendar.render();
             }
+
+            // Render calendar when its tab is shown
+            document.querySelector('button[data-bs-target="#calendar-view"]').addEventListener('shown.bs.tab', function (e) {
+                if (window.calendar) {
+                    window.calendar.render();
+                    // Trigger a resize to ensure proper rendering
+                    window.dispatchEvent(new Event('resize'));
+                }
+            });
         });
 
         function updateRelativeTimes() {
@@ -328,32 +349,6 @@
             window.open(url, '_blank');
         }
 
-        function switchView(view) {
-            document.getElementById('grid-view').style.display = view === 'grid' ? 'block' : 'none';
-            document.getElementById('calendar-view').style.display = view === 'calendar' ? 'block' : 'none';
-            
-            // Update active button state
-            document.querySelectorAll('.view-switcher .btn').forEach(btn => {
-                btn.classList.remove('active');
-            });
-            document.querySelector(`.view-switcher .btn[data-view="${view}"]`).classList.add('active');
-
-            // Trigger window resize to fix calendar rendering
-            if (view === 'calendar') {
-                window.dispatchEvent(new Event('resize'));
-            }
-
-            // Store preference
-            localStorage.setItem('preferredView', view);
-        }
-
-        // Initialize view based on stored preference
-        document.addEventListener('DOMContentLoaded', function() {
-            const preferredView = localStorage.getItem('preferredView') || 'grid';
-            switchView(preferredView);
-        });
-
-        // Add this new function for copying the calendar URL
         function copyCalendarUrl() {
             const urlText = document.getElementById('calendar-url').textContent;
             navigator.clipboard.writeText(urlText).then(() => {
@@ -391,6 +386,29 @@
                   '3. Click the + next to "Other calendars"\n' +
                   '4. Select "From URL"\n' +
                   '5. Paste the URL and click "Add calendar"');
+        }
+
+        function updateCalendarView() {
+            if (window.calendar) {
+                // Remove all existing events
+                window.calendar.removeAllEvents();
+                
+                // Add new events
+                const calendarEvents = window.currentEvents.map(event => ({
+                    title: event.title,
+                    start: event.start,
+                    end: event.end,
+                    url: event.url,
+                    backgroundColor: event.source_name === 'peoply.app' ? '#0d6efd' : '#198754',
+                    extendedProps: {
+                        location: event.location,
+                        food: event.food,
+                        source: event.source_name
+                    }
+                }));
+                
+                window.calendar.addEventSource(calendarEvents);
+            }
         }
     </script>
 </body>

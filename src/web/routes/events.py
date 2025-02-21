@@ -13,6 +13,9 @@ events_bp = Blueprint('events', __name__)
 def index():
     """Main page showing all upcoming events"""
     with db_manager.session() as db:
+        # Get source filter from query parameters
+        source = request.args.get('source', 'all')
+        
         # Query for all upcoming events
         now = now_oslo()
         stmt = select(Event).where(
@@ -20,7 +23,14 @@ def index():
                 Event.end_time > now,  # Event hasn't ended yet
                 Event.start_time > now  # Event hasn't started yet (for events with no end time)
             )
-        ).order_by(Event.start_time.asc())
+        )
+        
+        # Add source filter if not 'all'
+        if source != 'all':
+            stmt = stmt.where(Event.source_name == source)
+        
+        # Order by start time
+        stmt = stmt.order_by(Event.start_time.asc())
         
         events = db.execute(stmt).scalars().all()
         return render_template('index.html', events=events)
