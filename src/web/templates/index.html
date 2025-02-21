@@ -27,6 +27,9 @@
             <button type="button" class="btn btn-outline-secondary" data-source="ifinavet.no" onclick="filterSource('ifinavet.no')">
                 IFI Navet
             </button>
+            <button type="button" class="btn btn-outline-secondary" data-source="facebook.group" onclick="filterSource('facebook.group')">
+                Facebook
+            </button>
         </div>
     </div>
 
@@ -133,15 +136,19 @@ function filterSource(source) {
         }
     });
 
-    // Filter cards in grid view
+    // If 'all' is selected, show all cards
+    if (source === 'all') {
+        document.querySelectorAll('#grid-view .col').forEach(card => {
+            card.style.display = '';
+        });
+        return;
+    }
+
+    // Otherwise, filter cards by source
     document.querySelectorAll('#grid-view .col').forEach(card => {
         const sourceElement = card.querySelector('.source-name');
         const sourceText = sourceElement.textContent.split(': ')[1]; // Get text after "Source: "
-        if (source === 'all' || sourceText === source) {
-            card.style.display = '';
-        } else {
-            card.style.display = 'none';
-        }
+        card.style.display = (sourceText === source) ? '' : 'none';
     });
 }
 
