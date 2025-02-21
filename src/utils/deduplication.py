@@ -45,6 +45,16 @@ EVENT_MERGE_STRATEGIES: Dict[str, Callable[[Event, Event], Any]] = {
         ', '.join([e1.source_name, e2.source_name]) 
         if (e1.source_name and e2.source_name and e1.source_name != e2.source_name)
         else (e1.source_name or e2.source_name)
+    ),
+    'attachments': lambda e1, e2: (
+        list(set(e1.attachments or []) | set(e2.attachments or []))  # Combine unique attachments from both events
+        if (e1.attachments or e2.attachments)
+        else []
+    ),
+    'author': lambda e1, e2: (
+        f"{e1.author}, {e2.author}"
+        if (e1.author and e2.author and e1.author != e2.author)
+        else (e1.author or e2.author)
     )
 }
 
@@ -104,8 +114,8 @@ def are_events_duplicate(event1: Event, event2: Event, config: DuplicateConfig =
 def merge_events(event1: Event, event2: Event) -> Event:
     """
     Merge two events that are considered duplicates.
-    Always uses data from the newer event (based on fetched_at timestamp).
-    If fetched_at is the same, keeps existing data.
+    Always uses data from the newer event (based on fetched_at timestamp) as a base,
+    but applies special merge strategies for certain fields.
     
     Args:
         event1: First event (typically the existing one in the database)
@@ -118,15 +128,19 @@ def merge_events(event1: Event, event2: Event) -> Event:
     event1_time = event1.fetched_at or datetime.min.replace(tzinfo=event1.start_time.tzinfo)
     event2_time = event2.fetched_at or datetime.min.replace(tzinfo=event2.start_time.tzinfo)
     
-    # If event2 is newer, use all its data
-    if event2_time > event1_time:
-        # Keep the id and created_at from event1 if it exists
-        event2.id = event1.id if event1.id else event2.id
-        event2.created_at = event1.created_at if event1.created_at else event2.created_at
-        return event2
+    # Create a copy of the newer event as the base
+    base_event = event2 if event2_time > event1_time else event1
+    other_event = event1 if event2_time > event1_time else event2
     
-    # If same timestamp or event1 is newer, keep event1
-    return event1
+    # Apply special merge strategies
+    for field, strategy in EVENT_MERGE_STRATEGIES.items():
+        try:
+            merged_value = strategy(base_event, other_event)
+            setattr(base_event, field, merged_value)
+        except Exception as e:
+            logger.warning(f"Failed to apply merge strategy for {field}: {e}")
+    
+    return base_event
 
 def _get_event_columns() -> List[str]:
     """Get all column names from the Event model"""

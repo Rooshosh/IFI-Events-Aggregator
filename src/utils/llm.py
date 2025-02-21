@@ -97,11 +97,30 @@ def parse_event_details(content: str, url: str, config: Dict[str, Any]) -> Optio
             messages=[
                 {
                     "role": "system",
-                    "content": f"You are a helpful assistant that extracts event details from social media posts. Today's date is {current_date}. These posts are typically made close to when the events occur - usually within a few weeks before or after the current date. If a post mentions a date without a year, assume it's for a date close to the current date (within 1-2 months). Always respond with a valid JSON object."
+                    "content": (
+                        f"You are a helpful assistant that extracts event details from social media posts. "
+                        f"Today's date is {current_date}. The input will contain the post's original posting date. "
+                        f"When interpreting dates in the post content:\n"
+                        f"1. If the post mentions 'today', 'i dag', 'tomorrow', 'imorgen', etc., use the post's date as reference\n"
+                        f"2. If a date is mentioned without a year, use the year from the post date\n"
+                        f"3. For explicit dates with years, use those exactly as specified\n"
+                        f"Always respond with a valid JSON object."
+                    )
                 },
                 {
                     "role": "user",
-                    "content": f"Extract event details from this post. The post was likely made recently, so the event date should be relatively close to today ({current_date}). Please respond with a JSON object containing:\n- 'title': The event title\n- 'description': Full event description\n- 'start_time': Start time in ISO format (YYYY-MM-DDTHH:MM:SS). Choose the most likely date based on proximity to current date.\n- 'end_time': End time in ISO format (optional)\n- 'location': Event location (optional)\n\nPost content:\n\n{content}\n\nPost URL: {url}"
+                    "content": (
+                        f"Extract event details from this post. The input includes the post's original posting date "
+                        f"followed by the content. Please respond with a JSON object containing:\n"
+                        f"- 'title': The event title\n"
+                        f"- 'description': Full event description\n"
+                        f"- 'start_time': Start time in ISO format (YYYY-MM-DDTHH:MM:SS)\n"
+                        f"- 'end_time': End time in ISO format (optional)\n"
+                        f"- 'location': Event location (optional)\n"
+                        f"- 'food': Food/refreshments info (optional)\n"
+                        f"- 'registration_info': Registration details (optional)\n\n"
+                        f"Post:\n\n{content}\n\nPost URL: {url}"
+                    )
                 }
             ]
         )

@@ -226,14 +226,22 @@ class FacebookGroupScraper(BaseScraper):
         """
         # First check if this is an event post
         content = post.get('content', '')
-        is_event, explanation = is_event_post(content, self.openai_config)
+        
+        # Add post date for correct date interpretation
+        enriched_content = (
+            f"Post metadata:\n"
+            f"- Posted on: {post.get('date_posted', '')}\n"
+            f"\nPost content:\n{content}"
+        )
+        
+        is_event, explanation = is_event_post(enriched_content, self.openai_config)
         
         if not is_event:
             logger.debug(f"Post not detected as event: {explanation}")
             return None
         
-        # Parse event details
-        event_data = parse_event_details(content, post.get('url', ''), self.openai_config)
+        # Parse event details with enriched content
+        event_data = parse_event_details(enriched_content, post.get('url', ''), self.openai_config)
         if not event_data:
             logger.error("Failed to parse event details")
             return None
@@ -244,7 +252,48 @@ class FacebookGroupScraper(BaseScraper):
             start_time = ensure_oslo_timezone(datetime.fromisoformat(event_data['start_time']))
             end_time = None
             if event_data.get('end_time'):
-                end_time = ensure_oslo_timezone(datetime.fromisoformat(event_data['end_time']))
+                try:
+                    end_time = ensure_oslo_timezone(datetime.fromisoformat(event_data['end_time']))
+                except (ValueError, TypeError):
+                    # If end_time is invalid, keep it as None
+                    end_time = None
+            
+            # Get attachments (combine all relevant sources)
+            attachments = []
+            if post.get('attachments'):
+                # Extract URLs from attachment dictionaries
+                for attachment in post['attachments']:
+                    if isinstance(attachment, dict):
+                        # Get the main attachment URL
+                        if 'url' in attachment:
+                            attachments.append(attachment['url'])
+                        # Get the event/external URL if available
+                        if 'attachment_url' in attachment:
+                            attachments.append(attachment['attachment_url'])
+                    elif isinstance(attachment, str):
+                        attachments.append(attachment)
+            
+            # Add post external image if available
+            if post.get('post_external_image'):
+                if isinstance(post['post_external_image'], dict) and 'url' in post['post_external_image']:
+                    attachments.append(post['post_external_image']['url'])
+                elif isinstance(post['post_external_image'], str):
+                    attachments.append(post['post_external_image'])
+            
+            # Add external link if available and not already in attachments
+            if post.get('post_external_link') and post['post_external_link'] not in attachments:
+                attachments.append(post['post_external_link'])
+            
+            # Remove duplicates while preserving order
+            attachments = list(dict.fromkeys(attachments))
+            
+            # Convert post date to datetime with timezone
+            created_at = None
+            if post.get('date_posted'):
+                try:
+                    created_at = ensure_oslo_timezone(datetime.fromisoformat(post['date_posted']))
+                except (ValueError, TypeError):
+                    logger.warning(f"Failed to parse date_posted: {post.get('date_posted')}")
             
             event = Event(
                 title=event_data['title'],
@@ -253,7 +302,10 @@ class FacebookGroupScraper(BaseScraper):
                 end_time=end_time,
                 location=event_data.get('location'),
                 source_url=post.get('url', ''),
-                source_name=self.name()
+                source_name=self.name(),
+                author=post.get('user_username_raw'),  # Direct mapping from post author
+                attachments=attachments,  # Combined attachments list
+                created_at=created_at  # Post creation date
             )
             
             # Add food info to description if available

@@ -1,164 +1,767 @@
 {% extends "base.html" %}
 
 {% block content %}
-<!-- View Switcher -->
-<div class="d-flex justify-content-center mb-4">
-    <div class="view-switcher btn-group" role="group" aria-label="View switcher">
-        <button type="button" class="btn btn-outline-primary active" data-view="grid" onclick="switchView('grid')">
-            <i class="bi bi-grid"></i> Grid View
-        </button>
-        <button type="button" class="btn btn-outline-primary" data-view="calendar" onclick="switchView('calendar')">
-            <i class="bi bi-calendar3"></i> Calendar View
-        </button>
-    </div>
-</div>
+<!-- View Tabs and Filters Row -->
+<div class="mb-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <!-- Tab Navigation -->
+        <ul class="nav nav-tabs" id="viewTabs" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="list-tab" data-bs-toggle="tab" data-bs-target="#list-view" type="button" role="tab" aria-controls="list-view" aria-selected="true">
+                    <i class="bi bi-list"></i> <span class="view-text">List</span>
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="grid-tab" data-bs-toggle="tab" data-bs-target="#grid-view" type="button" role="tab" aria-controls="grid-view" aria-selected="false">
+                    <i class="bi bi-grid"></i> <span class="view-text">Grid</span>
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="calendar-tab" data-bs-toggle="tab" data-bs-target="#calendar-view" type="button" role="tab" aria-controls="calendar-view" aria-selected="false">
+                    <i class="bi bi-calendar3"></i> <span class="view-text">Calendar</span>
+                </button>
+            </li>
+        </ul>
 
-<!-- Grid View -->
-<div id="grid-view">
-    <!-- Source Filter -->
-    <div class="d-flex justify-content-center mb-3">
+        <!-- Source Filter -->
         <div class="source-filter btn-group" role="group" aria-label="Source filter">
             <button type="button" class="btn btn-outline-secondary active" data-source="all" onclick="filterSource('all')">
-                All Sources
+                <i class="bi bi-collection"></i>
+                <span class="filter-text">All</span>
             </button>
             <button type="button" class="btn btn-outline-secondary" data-source="peoply.app" onclick="filterSource('peoply.app')">
-                Peoply
+                <img src="{{ url_for('static', filename='img/Filter Icons/Peoply.png') }}" alt="Peoply" class="filter-icon">
+                <span class="filter-text">Peoply</span>
             </button>
             <button type="button" class="btn btn-outline-secondary" data-source="ifinavet.no" onclick="filterSource('ifinavet.no')">
-                IFI Navet
+                <img src="{{ url_for('static', filename='img/Filter Icons/Navet.png') }}" alt="Navet" class="filter-icon">
+                <span class="filter-text">Navet</span>
             </button>
             <button type="button" class="btn btn-outline-secondary" data-source="facebook.group" onclick="filterSource('facebook.group')">
-                Facebook
+                <img src="{{ url_for('static', filename='img/Filter Icons/Facebook.png') }}" alt="Facebook" class="filter-icon">
+                <span class="filter-text">Facebook</span>
             </button>
         </div>
     </div>
 
-    <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4">
-        {% for event in events %}
-        <div class="col">
-            <div class="card h-100">
-                <div class="card-body">
-                    <h5 class="card-title">{{ event.title }}</h5>
-                    
-                    <!-- Time information -->
-                    <div class="mb-3">
-                        <div class="event-time">
-                            <span data-event-time="{{ event.start_time.isoformat() }}">
-                                {{ event.start_time.strftime('%Y-%m-%d %H:%M') }}
-                            </span>
+    <!-- Tab Content -->
+    <div class="tab-content" id="viewTabsContent">
+        <!-- List View Tab -->
+        <div class="tab-pane fade show active" id="list-view" role="tabpanel" aria-labelledby="list-tab">
+            <div class="list-group">
+                {% for event in events %}
+                <div class="list-group-item" data-event-id="{{ event.id }}">
+                    <div class="list-entry-container">
+                        <div class="list-entry-main text-decoration-none text-body">
+                            <div class="d-flex justify-content-between align-items-start">
+                                <div class="flex-grow-1">
+                                    <h6 class="mb-1 d-flex align-items-center gap-2">
+                                        {{ event.title }}
+                                    </h6>
+                                    <div class="d-flex align-items-center small text-muted gap-2">
+                                        <span data-event-time="{{ event.start_time.isoformat() }}">
+                                            {{ event.start_time.strftime('%Y-%m-%d %H:%M') }}
+                                        </span>
+                                        {% if event.location %}
+                                        <span>📍 {{ event.location }}</span>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </div>
                         </div>
-                        
-                        <div class="event-duration">
-                            {{ event.start_time.strftime('%A, %B %d at %H:%M') }}
-                            {% if event.end_time %}
-                                - {{ event.end_time.strftime('%H:%M') }}
-                                <small>({{ (event.end_time - event.start_time).total_seconds() // 3600 }} hours)</small>
+                        <div class="list-entry-button list-entry-link">
+                            <button onclick="window.open('{{ event.source_url if event.source_url else '#' }}', '_blank')" 
+                                    class="btn btn-link text-decoration-none"
+                                    title="View Event">
+                                <span class="source-text">See on</span>
+                                <img src="{{ url_for('static', filename='img/Filter Icons/' + {
+                                    'peoply.app': 'Peoply.png',
+                                    'ifinavet.no': 'Navet.png',
+                                    'facebook.group': 'Facebook.png'
+                                }[event.source_name]) }}" alt="{{ event.source_name }}" class="source-icon">
+                            </button>
+                        </div>
+                        <div class="list-entry-button list-entry-calendar">
+                            <button onclick="addToCalendar(this)" 
+                                    data-event-title="{{ event.title }}"
+                                    data-event-start="{{ event.start_time.isoformat() }}"
+                                    data-event-end="{% if event.end_time %}{{ event.end_time.isoformat() }}{% endif %}"
+                                    data-event-location="{% if event.location %}{{ event.location }}{% endif %}"
+                                    data-event-description="{{ event.description }}"
+                                    class="btn btn-link text-decoration-none"
+                                    title="Add to Calendar">
+                                <i class="bi bi-calendar-plus-fill"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- Grid View Tab -->
+        <div class="tab-pane fade" id="grid-view" role="tabpanel" aria-labelledby="grid-tab">
+            <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4">
+                {% for event in events %}
+                <div class="col" data-event-id="{{ event.id }}">
+                    <div class="card h-100">
+                        <div class="card-body">
+                            <h5 class="card-title">{{ event.title }}</h5>
+                            
+                            <!-- Time information -->
+                            <div class="mb-3">
+                                <div class="event-time">
+                                    <span data-event-time="{{ event.start_time.isoformat() }}">
+                                        {{ event.start_time.strftime('%Y-%m-%d %H:%M') }}
+                                    </span>
+                                </div>
+                                
+                                <div class="event-duration">
+                                    {{ event.start_time.strftime('%A, %B %d at %H:%M') }}
+                                    {% if event.end_time %}
+                                        - {{ event.end_time.strftime('%H:%M') }}
+                                        <small>({{ (event.end_time - event.start_time).total_seconds() // 3600 }} hours)</small>
+                                    {% endif %}
+                                </div>
+                            </div>
+
+                            <!-- Location and Food -->
+                            <div class="mb-3">
+                                {% if event.location %}
+                                    <p class="card-text mb-2"><small class="text-muted">📍 {{ event.location }}</small></p>
+                                {% endif %}
+                                {% if event.food %}
+                                    <span class="food-badge">
+                                        🍽️ {{ event.food }}
+                                    </span>
+                                {% endif %}
+                            </div>
+
+                            <!-- Description -->
+                            <p class="card-text">{{ event.description[:200] }}{% if event.description|length > 200 %}...{% endif %}</p>
+                            
+                            <!-- Action buttons -->
+                            <div class="mt-3 d-flex flex-wrap gap-2">
+                                {% if event.source_url %}
+                                    <a href="{{ event.source_url }}" class="btn btn-primary" target="_blank">Event Details</a>
+                                {% endif %}
+                                <button onclick="addToCalendar(this)" 
+                                        data-event-title="{{ event.title }}"
+                                        data-event-start="{{ event.start_time.isoformat() }}"
+                                        data-event-end="{% if event.end_time %}{{ event.end_time.isoformat() }}{% endif %}"
+                                        data-event-location="{% if event.location %}{{ event.location }}{% endif %}"
+                                        data-event-description="{{ event.description }}"
+                                        class="btn btn-outline-secondary">
+                                    📅 Add to Calendar
+                                </button>
+                            </div>
+
+                            <!-- Source information -->
+                            {% if event.author %}
+                                <small class="text-muted d-block mt-2">By: {{ event.author }}</small>
+                            {% endif %}
+                            <small class="text-muted source-name d-block mt-1">Source: {{ event.source_name }}</small>
+                            {% if event.fetched_at %}
+                                <small class="text-muted d-block">Last updated: {{ event.fetched_at.strftime('%Y-%m-%d %H:%M') }}</small>
                             {% endif %}
                         </div>
                     </div>
-
-                    <!-- Location and Food -->
-                    <div class="mb-3">
-                        {% if event.location %}
-                            <p class="card-text mb-2"><small class="text-muted">📍 {{ event.location }}</small></p>
-                        {% endif %}
-                        {% if event.food %}
-                            <span class="food-badge">
-                                🍽️ {{ event.food }}
-                            </span>
-                        {% endif %}
-                    </div>
-
-                    <!-- Description -->
-                    <p class="card-text">{{ event.description[:200] }}{% if event.description|length > 200 %}...{% endif %}</p>
-                    
-                    <!-- Action buttons -->
-                    <div class="mt-3 d-flex flex-wrap gap-2">
-                        {% if event.source_url %}
-                            <a href="{{ event.source_url }}" class="btn btn-primary" target="_blank">Event Details</a>
-                        {% endif %}
-                        <button onclick="addToCalendar(this)" 
-                                data-event-title="{{ event.title }}"
-                                data-event-start="{{ event.start_time.isoformat() }}"
-                                data-event-end="{% if event.end_time %}{{ event.end_time.isoformat() }}{% endif %}"
-                                data-event-location="{% if event.location %}{{ event.location }}{% endif %}"
-                                data-event-description="{{ event.description }}"
-                                class="btn btn-outline-secondary">
-                            📅 Add to Calendar
-                        </button>
-                    </div>
-
-                    <!-- Source information -->
-                    <small class="text-muted source-name d-block mt-2">Source: {{ event.source_name }}</small>
-                    {% if event.fetched_at %}
-                        <small class="text-muted d-block">Last updated: {{ event.fetched_at.strftime('%Y-%m-%d %H:%M') }}</small>
-                    {% endif %}
                 </div>
+                {% endfor %}
             </div>
         </div>
-        {% endfor %}
+
+        <!-- Calendar View Tab -->
+        <div class="tab-pane fade" id="calendar-view" role="tabpanel" aria-labelledby="calendar-tab">
+            <div class="d-flex justify-content-end mb-3">
+                <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#calendarModal">
+                    <i class="bi bi-calendar-plus"></i> Subscribe to Calendar
+                </button>
+            </div>
+            <div id="calendar"></div>
+        </div>
     </div>
 </div>
 
-<!-- Calendar View -->
-<div id="calendar-view" style="display: none;">
-    <div id="calendar"></div>
-</div>
+<style>
+.filter-icon {
+    height: 20px;
+    width: 20px;
+    object-fit: contain;
+    margin-right: 4px;
+    vertical-align: text-bottom;
+}
+
+.source-filter .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 12px;
+}
+
+/* Hide text on mobile */
+@media (max-width: 576px) {
+    .filter-text {
+        display: none;
+    }
+    
+    .source-filter .btn {
+        padding: 6px 10px;
+    }
+    
+    .filter-icon {
+        margin-right: 0;
+    }
+}
+
+.source-icon {
+    height: 16px;
+    width: 16px;
+    object-fit: contain;
+    vertical-align: text-bottom;
+}
+
+.list-group-item {
+    transition: background-color 0.15s ease-in-out;
+    padding: 0 !important; /* Override Bootstrap padding */
+}
+
+.list-group-item:hover {
+    background-color: #f8f9fa;
+}
+
+.list-group-item .btn {
+    opacity: 0.7;
+}
+
+.list-group-item:hover .btn {
+    opacity: 1;
+}
+
+/* Add these new styles for text truncation */
+.list-entry-main h6 {
+    margin-bottom: 0.25rem !important;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+}
+
+.list-entry-main .text-muted {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+}
+
+.list-entry-main .flex-grow-1 {
+    min-width: 0; /* Enable text truncation in flex container */
+    width: 100%; /* Ensure it takes full width */
+    overflow: hidden; /* Contain the content */
+}
+
+.list-entry-container {
+    display: flex;
+    width: 100%;
+    height: 3.5rem; /* Fixed height for all list items */
+}
+
+.list-entry-main {
+    flex: 1;
+    min-width: 0; /* Prevent flex item from overflowing */
+    padding: 0.5rem 1rem;
+    display: flex;
+    align-items: center;
+    overflow: hidden; /* Contain all content */
+}
+
+.list-entry-main > div {
+    width: 100%; /* Ensure the inner div takes full width */
+    overflow: hidden; /* Contain its content */
+}
+
+.d-flex.justify-content-between {
+    width: 100%; /* Ensure it takes full width */
+    overflow: hidden; /* Contain the content */
+}
+
+.list-entry-button {
+    width: 12%;  /* Width for the source button */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 0.15s ease-in-out;
+}
+
+.list-entry-button.list-entry-calendar {
+    width: 8%;  /* Smaller width for calendar button */
+}
+
+.list-entry-button .btn {
+    width: 100%;
+    height: 100%;
+    padding: 0 8px;  /* Added horizontal padding */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.list-entry-button.list-entry-calendar .btn {
+    color: white !important;
+}
+
+.list-entry-button.list-entry-link .btn {
+    color: #495057 !important;
+}
+
+/* Remove the general hover rules */
+.list-entry-button .btn i {
+    color: white !important;
+    font-size: 1.2rem;
+    opacity: 0.85;
+    transition: opacity 0.15s ease-in-out;
+}
+
+/* Update source icon size for the link button */
+.list-entry-button .source-icon {
+    height: 20px;
+    width: 20px;
+    object-fit: contain;
+    opacity: 0.85;
+    transition: opacity 0.15s ease-in-out;
+}
+
+@media (max-width: 768px) {
+    .list-entry-button {
+        width: 16.666667%;
+    }
+    
+    .list-entry-button.list-entry-calendar {
+        width: 16.666667%;  /* Same width as source button on mobile */
+    }
+    
+    .list-entry-button .btn {
+        padding: 0;
+    }
+}
+
+/* Specific hover rules for each button */
+.list-entry-link {
+    background-color: #f8f9fa;
+    border-left: 1px solid rgba(0,0,0,.1);
+}
+
+.list-entry-link:hover {
+    background-color: #e9ecef;
+}
+
+.list-entry-link:hover .source-icon {
+    opacity: 1;
+}
+
+.list-entry-calendar {
+    background-color: var(--bs-primary);
+    border-left: 1px solid rgba(0,0,0,.1);
+}
+
+.list-entry-calendar:hover {
+    background-color: #3d8bfd;
+}
+
+.list-entry-calendar:hover .btn i {
+    opacity: 1;
+}
+
+@media (max-width: 768px) {
+    .list-entry-button {
+        width: 16.666667%; /* 1/6 of the width */
+    }
+}
+
+/* Add these new styles for time display */
+.time-long {
+    display: inline;
+}
+
+.time-short {
+    display: none;
+}
+
+@media (max-width: 576px) {
+    .time-long {
+        display: none;
+    }
+    
+    .time-short {
+        display: inline;
+    }
+}
+
+/* Add styles for the source text and calendar text */
+.source-text, .calendar-text {
+    margin-right: 8px;
+    color: #495057;
+}
+
+@media (max-width: 768px) {
+    .source-text, .calendar-text {
+        display: none;
+        margin-right: 0;
+    }
+}
+</style>
 
 <!-- Calendar Events Data -->
 <script>
-    window.calendarEvents = [
+    // Store all events data for filtering
+    window.allEventsBackup = [
         {% for event in events %}
         {
+            id: {{ event.id|tojson }},
             title: {{ event.title|tojson }},
             start: {{ event.start_time.isoformat()|tojson }},
             {% if event.end_time %}end: {{ event.end_time.isoformat()|tojson }},{% endif %}
             url: {{ event.source_url|tojson if event.source_url else 'null' }},
-            backgroundColor: {{ event.source_name|tojson }} === 'peoply.app' ? '#0d6efd' : '#198754',
-            extendedProps: {
-                location: {{ event.location|tojson if event.location else 'null' }},
-                food: {{ event.food|tojson if event.food else 'null' }},
-                source: {{ event.source_name|tojson }}
-            }
+            source_name: {{ event.source_name|tojson }},
+            location: {{ event.location|tojson if event.location else 'null' }},
+            food: {{ event.food|tojson if event.food else 'null' }},
+            description: {{ event.description|tojson }},
+            author: {{ event.author|tojson if event.author else 'null' }},
+            fetched_at: {{ event.fetched_at.isoformat()|tojson if event.fetched_at else 'null' }}
         }{% if not loop.last %},{% endif %}
         {% endfor %}
     ];
-</script>
 
-<!-- Add JavaScript for filtering -->
-<script>
-function filterSource(source) {
-    // Update button states
-    document.querySelectorAll('.source-filter .btn').forEach(btn => {
-        btn.classList.remove('active');
-        if (btn.dataset.source === source) {
-            btn.classList.add('active');
+    // Working copy of events that will be filtered
+    window.currentEvents = [...window.allEventsBackup];
+
+    // Store current view
+    let currentView = 'list';
+
+    function formatRelativeTime(dateStr) {
+        const eventTime = new Date(dateStr);
+        const now = new Date();
+        const diffMs = eventTime - now;
+        const diffDays = diffMs / (1000 * 60 * 60 * 24);
+        const diffHours = Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+        
+        let longFormat, shortFormat;
+        
+        if (diffDays > 0) {
+            // Special case for tomorrow (between 1 and 2 days)
+            if (diffDays >= 1 && diffDays < 2) {
+                longFormat = 'tomorrow';
+                shortFormat = 'tmrw';
+            } else {
+                // Round up for days
+                const roundedDays = Math.ceil(diffDays);
+                longFormat = `in ${roundedDays} day${roundedDays > 1 ? 's' : ''}`;
+                shortFormat = `in ${roundedDays}d`;
+            }
+        } else if (diffHours > 0) {
+            longFormat = `in ${diffHours} hour${diffHours > 1 ? 's' : ''}`;
+            shortFormat = `in ${diffHours}h`;
+        } else if (diffMs > 0) {
+            longFormat = 'starting soon';
+            shortFormat = 'soon';
+        } else {
+            longFormat = 'ongoing';
+            shortFormat = 'now';
         }
-    });
-
-    // If 'all' is selected, show all cards
-    if (source === 'all') {
-        document.querySelectorAll('#grid-view .col').forEach(card => {
-            card.style.display = '';
-        });
-        return;
+        
+        return `<span class="time-long">${longFormat}</span><span class="time-short">${shortFormat}</span>`;
     }
 
-    // Otherwise, filter cards by source
-    document.querySelectorAll('#grid-view .col').forEach(card => {
-        const sourceElement = card.querySelector('.source-name');
-        const sourceText = sourceElement.textContent.split(': ')[1]; // Get text after "Source: "
-        card.style.display = (sourceText === source) ? '' : 'none';
-    });
+    function escapeHtml(unsafe) {
+        return unsafe
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#039;");
+    }
+
+    function renderListView() {
+        const container = document.querySelector('#list-view .list-group');
+        container.innerHTML = window.currentEvents.map(event => `
+            <div class="list-group-item" data-event-id="${event.id}">
+                <div class="list-entry-container">
+                    <div class="list-entry-main text-decoration-none text-body">
+                        <div class="d-flex justify-content-between align-items-start">
+                            <div class="flex-grow-1">
+                                <h6 class="mb-1 d-flex align-items-center gap-2">
+                                    ${escapeHtml(event.title)}
+                                </h6>
+                                <div class="d-flex align-items-center small text-muted gap-2">
+                                    <span data-event-time="${event.start}">${formatRelativeTime(event.start)}</span>
+                                    ${event.location ? `<span>📍 ${escapeHtml(event.location)}</span>` : ''}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="list-entry-button list-entry-link">
+                        <button onclick="window.open('${event.url || '#'}', '_blank')" 
+                                class="btn btn-link text-decoration-none"
+                                title="View Event">
+                            <span class="source-text">See on</span>
+                            <img src="/static/img/Filter Icons/${
+                                event.source_name === 'peoply.app' ? 'Peoply.png' :
+                                event.source_name === 'ifinavet.no' ? 'Navet.png' :
+                                'Facebook.png'
+                            }" alt="${event.source_name}" class="source-icon">
+                        </button>
+                    </div>
+                    <div class="list-entry-button list-entry-calendar">
+                        <button onclick="addToCalendar(this)" 
+                                data-event-title="${escapeHtml(event.title)}"
+                                data-event-start="${event.start}"
+                                data-event-end="${event.end || ''}"
+                                data-event-location="${event.location ? escapeHtml(event.location) : ''}"
+                                data-event-description="${event.description ? escapeHtml(event.description) : ''}"
+                                class="btn btn-link text-decoration-none"
+                                title="Add to Calendar">
+                            <i class="bi bi-calendar-plus-fill"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    function renderGridView() {
+        const container = document.querySelector('#grid-view .row');
+        container.innerHTML = window.currentEvents.map(event => `
+            <div class="col" data-event-id="${event.id}">
+                <div class="card h-100">
+                    <div class="card-body">
+                        <h5 class="card-title">${escapeHtml(event.title)}</h5>
+                        
+                        <div class="mb-3">
+                            <div class="event-time">
+                                <span data-event-time="${event.start}">${formatRelativeTime(event.start)}</span>
+                            </div>
+                            
+                            <div class="event-duration">
+                                ${new Date(event.start).toLocaleString('en-US', { weekday: 'long', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                                ${event.end ? `
+                                    - ${new Date(event.end).toLocaleString('en-US', { hour: '2-digit', minute: '2-digit' })}
+                                    <small>(${Math.floor((new Date(event.end) - new Date(event.start)) / 3600000)} hours)</small>
+                                ` : ''}
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            ${event.location ? `
+                                <p class="card-text mb-2"><small class="text-muted">📍 ${escapeHtml(event.location)}</small></p>
+                            ` : ''}
+                            ${event.food ? `
+                                <span class="food-badge">🍽️ ${escapeHtml(event.food)}</span>
+                            ` : ''}
+                        </div>
+
+                        <p class="card-text">${event.description ? escapeHtml(event.description.length > 200 ? event.description.substring(0, 200) + '...' : event.description) : ''}</p>
+                        
+                        <div class="mt-3 d-flex flex-wrap gap-2">
+                            ${event.url ? `
+                                <a href="${event.url}" class="btn btn-primary" target="_blank">Event Details</a>
+                            ` : ''}
+                            <button onclick="addToCalendar(this)" 
+                                    data-event-title="${escapeHtml(event.title)}"
+                                    data-event-start="${event.start}"
+                                    data-event-end="${event.end || ''}"
+                                    data-event-location="${event.location ? escapeHtml(event.location) : ''}"
+                                    data-event-description="${event.description ? escapeHtml(event.description) : ''}"
+                                    class="btn btn-outline-secondary">
+                                📅 Add to Calendar
+                            </button>
+                        </div>
+
+                        ${event.author ? `
+                            <small class="text-muted d-block mt-2">By: ${escapeHtml(event.author)}</small>
+                        ` : ''}
+                        <small class="text-muted source-name d-block mt-1">Source: ${event.source_name}</small>
+                        ${event.fetched_at ? `
+                            <small class="text-muted d-block">Last updated: ${new Date(event.fetched_at).toLocaleString()}</small>
+                        ` : ''}
+                    </div>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    function updateCalendarView() {
+        if (window.calendar) {
+            // Remove all events using the correct API method
+            window.calendar.getEvents().forEach(event => event.remove());
+            
+            // Add new events
+            const calendarEvents = window.currentEvents.map(event => ({
+                title: event.title,
+                start: event.start,
+                end: event.end,
+                url: event.url,
+                backgroundColor: event.source_name === 'peoply.app' ? '#0d6efd' : '#198754',
+                extendedProps: {
+                    location: event.location,
+                    food: event.food,
+                    source: event.source_name
+                }
+            }));
+            
+            // Add events directly instead of using addEventSource
+            window.calendar.addEventSource(calendarEvents);
+        }
+    }
+
+    function renderCurrentView() {
+        switch (currentView) {
+            case 'list':
+                renderListView();
+                break;
+            case 'grid':
+                renderGridView();
+                break;
+            case 'calendar':
+                updateCalendarView();
+                break;
+        }
+    }
+
+    function switchView(view) {
+        // Get the tab button element
+        const tabButton = document.getElementById(`${view}-tab`);
+        if (!tabButton) return;
+
+        // Trigger the Bootstrap tab
+        const tab = new bootstrap.Tab(tabButton);
+        tab.show();
+
+        // Set current view
+        currentView = view;
+
+        // If switching to calendar view, make sure to re-render it
+        if (view === 'calendar' && window.calendar) {
+            window.calendar.render();
+        }
+
+        // Render the view content
+        renderCurrentView();
+    }
+
+    function filterSource(source) {
+        // Clean up the source string to remove any hidden characters
+        source = source.trim().replace(/[\u2013\u2014]/g, '');
+        
+        // Update button states
+        document.querySelectorAll('.source-filter .btn').forEach(btn => {
+            btn.classList.remove('active');
+            if (btn.dataset.source === source) {
+                btn.classList.add('active');
+            }
+        });
+
+        // Filter events
+        window.currentEvents = source === 'all' 
+            ? [...window.allEventsBackup]
+            : window.allEventsBackup.filter(event => event.source_name === source);
+
+        // Update URL without reloading
+        const url = new URL(window.location);
+        url.searchParams.set('source', source);
+        window.history.pushState({}, '', url);
+
+        // Re-render the current view with filtered events
+        renderCurrentView();
+    }
+
+    // Initialize on page load
+    window.onload = function() {
+        // Initialize calendar if not already initialized
+        if (!window.calendar && document.getElementById('calendar')) {
+            window.calendar = new FullCalendar.Calendar(document.getElementById('calendar'), {
+                initialView: 'dayGridMonth',
+                headerToolbar: {
+                    left: 'prev,next today',
+                    center: 'title',
+                    right: 'dayGridMonth,timeGridWeek,timeGridDay'
+                },
+                events: window.currentEvents.map(event => ({
+                    title: event.title,
+                    start: event.start,
+                    end: event.end,
+                    url: event.url,
+                    backgroundColor: event.source_name === 'peoply.app' ? '#0d6efd' : '#198754',
+                    extendedProps: {
+                        location: event.location,
+                        food: event.food,
+                        source: event.source_name
+                    }
+                }))
+            });
+            window.calendar.render();
+        }
+        
+        // Get source from URL parameter and apply filter
+        const urlParams = new URLSearchParams(window.location.search);
+        const source = urlParams.get('source') || 'all';
+        filterSource(source);
+        
+        // Set up tab event listeners using Bootstrap's API
+        document.querySelectorAll('button[data-bs-toggle="tab"]').forEach(tabEl => {
+            tabEl.addEventListener('shown.bs.tab', event => {
+                const view = event.target.getAttribute('data-bs-target').replace('#', '').replace('-view', '');
+                currentView = view;
+                renderCurrentView();
+                
+                if (view === 'calendar' && window.calendar) {
+                    window.calendar.render();
+                }
+            });
+        });
+    };
+</script>
+
+<style>
+/* Custom styling for nav tabs - using Bootstrap's default behavior */
+.nav-tabs {
+    border-bottom: 1px solid #dee2e6;
 }
 
-// Add this to the existing window.onload function
-const existingOnload = window.onload;
-window.onload = function() {
-    if (existingOnload) existingOnload();
+.nav-tabs .nav-link {
+    margin-bottom: -1px;
+    border: 1px solid transparent;
+    border-top-left-radius: 0.25rem;
+    border-top-right-radius: 0.25rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.nav-tabs .nav-link:hover,
+.nav-tabs .nav-link:focus {
+    border-color: #e9ecef #e9ecef #dee2e6;
+}
+
+.nav-tabs .nav-link.active {
+    color: #495057;
+    background-color: #fff;
+    border-color: #dee2e6 #dee2e6 #fff;
+}
+
+/* Remove any custom display handling for tab panes */
+.tab-content {
+    width: 100%;
+}
+
+/* Hide view text on mobile */
+@media (max-width: 576px) {
+    .view-text {
+        display: none;
+    }
     
-    // Initialize source filter
-    filterSource('all');
-};
-</script>
+    .nav-tabs .nav-link {
+        padding: 8px 12px;
+    }
+}
+</style>
 {% endblock %} 
