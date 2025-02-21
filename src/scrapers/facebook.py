@@ -374,13 +374,21 @@ class FacebookGroupScraper(BaseScraper):
             )
             posts = json.loads(posts_json)
             
+            # Filter out "no results" records (they have url=null and usually a warning message)
+            valid_posts = [post for post in posts if post.get('url') is not None]
+            if len(valid_posts) < len(posts):
+                logger.info(f"Filtered out {len(posts) - len(valid_posts)} 'no results' records")
+                if not valid_posts:
+                    logger.info("No valid posts found in response")
+                    return []
+            
             # Get the fetch timestamp
             meta = self.cache_manager.get_metadata(self.name(), 'latest_posts')
             fetch_time = datetime.fromisoformat(meta['cached_at']) if meta else now_oslo()
             
             # Parse posts into events
             events = []
-            for post in posts:
+            for post in valid_posts:
                 try:
                     event = self._parse_post_to_event(post)
                     if event:
@@ -391,7 +399,7 @@ class FacebookGroupScraper(BaseScraper):
                     logger.error(f"Error parsing post: {e}")
                     continue
             
-            logger.info(f"Found {len(events)} events in {len(posts)} posts")
+            logger.info(f"Found {len(events)} events in {len(valid_posts)} posts")
             return events
             
         except Exception as e:
