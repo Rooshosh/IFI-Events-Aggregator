@@ -5,19 +5,55 @@
 <div class="d-flex justify-content-center mb-3">
     <div class="source-filter btn-group" role="group" aria-label="Source filter">
         <button type="button" class="btn btn-outline-secondary active" data-source="all" onclick="filterSource('all')">
-            All Sources
+            <i class="bi bi-collection"></i>
+            <span class="filter-text">All</span>
         </button>
         <button type="button" class="btn btn-outline-secondary" data-source="peoply.app" onclick="filterSource('peoply.app')">
-            Peoply
+            <img src="{{ url_for('static', filename='img/Filter Icons/Peoply.png') }}" alt="Peoply" class="filter-icon">
+            <span class="filter-text">Peoply</span>
         </button>
         <button type="button" class="btn btn-outline-secondary" data-source="ifinavet.no" onclick="filterSource('ifinavet.no')">
-            Navet
+            <img src="{{ url_for('static', filename='img/Filter Icons/Navet.png') }}" alt="Navet" class="filter-icon">
+            <span class="filter-text">Navet</span>
         </button>
         <button type="button" class="btn btn-outline-secondary" data-source="facebook.group" onclick="filterSource('facebook.group')">
-            Facebook
+            <img src="{{ url_for('static', filename='img/Filter Icons/Facebook.png') }}" alt="Facebook" class="filter-icon">
+            <span class="filter-text">Facebook</span>
         </button>
     </div>
 </div>
+
+<style>
+.filter-icon {
+    height: 20px;
+    width: 20px;
+    object-fit: contain;
+    margin-right: 4px;
+    vertical-align: text-bottom;
+}
+
+.source-filter .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 12px;
+}
+
+/* Hide text on mobile */
+@media (max-width: 576px) {
+    .filter-text {
+        display: none;
+    }
+    
+    .source-filter .btn {
+        padding: 6px 10px;
+    }
+    
+    .filter-icon {
+        margin-right: 0;
+    }
+}
+</style>
 
 <!-- View Tabs -->
 <div class="mb-4">
@@ -25,17 +61,17 @@
     <ul class="nav nav-tabs justify-content-center mb-3" id="viewTabs" role="tablist">
         <li class="nav-item" role="presentation">
             <button class="nav-link active" id="list-tab" data-bs-toggle="tab" data-bs-target="#list-view" type="button" role="tab" aria-controls="list-view" aria-selected="true">
-                <i class="bi bi-list"></i> List View
+                <i class="bi bi-list"></i> <span class="view-text">List</span>
             </button>
         </li>
         <li class="nav-item" role="presentation">
             <button class="nav-link" id="grid-tab" data-bs-toggle="tab" data-bs-target="#grid-view" type="button" role="tab" aria-controls="grid-view" aria-selected="false">
-                <i class="bi bi-grid"></i> Grid View
+                <i class="bi bi-grid"></i> <span class="view-text">Grid</span>
             </button>
         </li>
         <li class="nav-item" role="presentation">
             <button class="nav-link" id="calendar-tab" data-bs-toggle="tab" data-bs-target="#calendar-view" type="button" role="tab" aria-controls="calendar-view" aria-selected="false">
-                <i class="bi bi-calendar3"></i> Calendar View
+                <i class="bi bi-calendar3"></i> <span class="view-text">Calendar</span>
             </button>
         </li>
     </ul>
@@ -477,6 +513,9 @@
     border: 1px solid transparent;
     border-top-left-radius: 0.25rem;
     border-top-right-radius: 0.25rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
 }
 
 .nav-tabs .nav-link:hover,
@@ -493,6 +532,17 @@
 /* Remove any custom display handling for tab panes */
 .tab-content {
     width: 100%;
+}
+
+/* Hide view text on mobile */
+@media (max-width: 576px) {
+    .view-text {
+        display: none;
+    }
+    
+    .nav-tabs .nav-link {
+        padding: 8px 12px;
+    }
 }
 </style>
 {% endblock %} 
