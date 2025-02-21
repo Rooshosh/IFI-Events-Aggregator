@@ -89,15 +89,14 @@ class PeoplyScraper(BaseScraper):
                     if categories:
                         event.description = f"{event.description}\n\nCategories: {', '.join(categories)}"
                     
-                    # Add organizer info to description
+                    # Set the author to the organization name
                     for arranger in api_event.get('eventArrangers', []):
                         if arranger.get('role') == 'ADMIN':
                             if arranger['arranger'].get('organization'):
-                                org = arranger['arranger']['organization']
-                                event.description = f"Organized by: {org['name']}\n\n{event.description}"
+                                event.author = arranger['arranger']['organization']['name']
                             elif arranger['arranger'].get('user'):
                                 user = arranger['arranger']['user']
-                                event.description = f"Organized by: {user['firstName']} {user['lastName']}\n\n{event.description}"
+                                event.author = f"{user['firstName']} {user['lastName']}"
                             break
                     
                     events.append(event)
