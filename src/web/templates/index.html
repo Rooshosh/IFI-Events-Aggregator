@@ -1,80 +1,48 @@
 {% extends "base.html" %}
 
 {% block content %}
-<!-- Source Filter -->
-<div class="d-flex justify-content-center mb-3">
-    <div class="source-filter btn-group" role="group" aria-label="Source filter">
-        <button type="button" class="btn btn-outline-secondary active" data-source="all" onclick="filterSource('all')">
-            <i class="bi bi-collection"></i>
-            <span class="filter-text">All</span>
-        </button>
-        <button type="button" class="btn btn-outline-secondary" data-source="peoply.app" onclick="filterSource('peoply.app')">
-            <img src="{{ url_for('static', filename='img/Filter Icons/Peoply.png') }}" alt="Peoply" class="filter-icon">
-            <span class="filter-text">Peoply</span>
-        </button>
-        <button type="button" class="btn btn-outline-secondary" data-source="ifinavet.no" onclick="filterSource('ifinavet.no')">
-            <img src="{{ url_for('static', filename='img/Filter Icons/Navet.png') }}" alt="Navet" class="filter-icon">
-            <span class="filter-text">Navet</span>
-        </button>
-        <button type="button" class="btn btn-outline-secondary" data-source="facebook.group" onclick="filterSource('facebook.group')">
-            <img src="{{ url_for('static', filename='img/Filter Icons/Facebook.png') }}" alt="Facebook" class="filter-icon">
-            <span class="filter-text">Facebook</span>
-        </button>
-    </div>
-</div>
-
-<style>
-.filter-icon {
-    height: 20px;
-    width: 20px;
-    object-fit: contain;
-    margin-right: 4px;
-    vertical-align: text-bottom;
-}
-
-.source-filter .btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    padding: 6px 12px;
-}
-
-/* Hide text on mobile */
-@media (max-width: 576px) {
-    .filter-text {
-        display: none;
-    }
-    
-    .source-filter .btn {
-        padding: 6px 10px;
-    }
-    
-    .filter-icon {
-        margin-right: 0;
-    }
-}
-</style>
-
-<!-- View Tabs -->
+<!-- View Tabs and Filters Row -->
 <div class="mb-4">
-    <!-- Tab Navigation -->
-    <ul class="nav nav-tabs justify-content-center mb-3" id="viewTabs" role="tablist">
-        <li class="nav-item" role="presentation">
-            <button class="nav-link active" id="list-tab" data-bs-toggle="tab" data-bs-target="#list-view" type="button" role="tab" aria-controls="list-view" aria-selected="true">
-                <i class="bi bi-list"></i> <span class="view-text">List</span>
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <!-- Tab Navigation -->
+        <ul class="nav nav-tabs" id="viewTabs" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="list-tab" data-bs-toggle="tab" data-bs-target="#list-view" type="button" role="tab" aria-controls="list-view" aria-selected="true">
+                    <i class="bi bi-list"></i> <span class="view-text">List</span>
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="grid-tab" data-bs-toggle="tab" data-bs-target="#grid-view" type="button" role="tab" aria-controls="grid-view" aria-selected="false">
+                    <i class="bi bi-grid"></i> <span class="view-text">Grid</span>
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="calendar-tab" data-bs-toggle="tab" data-bs-target="#calendar-view" type="button" role="tab" aria-controls="calendar-view" aria-selected="false">
+                    <i class="bi bi-calendar3"></i> <span class="view-text">Calendar</span>
+                </button>
+            </li>
+        </ul>
+
+        <!-- Source Filter -->
+        <div class="source-filter btn-group" role="group" aria-label="Source filter">
+            <button type="button" class="btn btn-outline-secondary active" data-source="all" onclick="filterSource('all')">
+                <i class="bi bi-collection"></i>
+                <span class="filter-text">All</span>
             </button>
-        </li>
-        <li class="nav-item" role="presentation">
-            <button class="nav-link" id="grid-tab" data-bs-toggle="tab" data-bs-target="#grid-view" type="button" role="tab" aria-controls="grid-view" aria-selected="false">
-                <i class="bi bi-grid"></i> <span class="view-text">Grid</span>
+            <button type="button" class="btn btn-outline-secondary" data-source="peoply.app" onclick="filterSource('peoply.app')">
+                <img src="{{ url_for('static', filename='img/Filter Icons/Peoply.png') }}" alt="Peoply" class="filter-icon">
+                <span class="filter-text">Peoply</span>
             </button>
-        </li>
-        <li class="nav-item" role="presentation">
-            <button class="nav-link" id="calendar-tab" data-bs-toggle="tab" data-bs-target="#calendar-view" type="button" role="tab" aria-controls="calendar-view" aria-selected="false">
-                <i class="bi bi-calendar3"></i> <span class="view-text">Calendar</span>
+            <button type="button" class="btn btn-outline-secondary" data-source="ifinavet.no" onclick="filterSource('ifinavet.no')">
+                <img src="{{ url_for('static', filename='img/Filter Icons/Navet.png') }}" alt="Navet" class="filter-icon">
+                <span class="filter-text">Navet</span>
             </button>
-        </li>
-    </ul>
+            <button type="button" class="btn btn-outline-secondary" data-source="facebook.group" onclick="filterSource('facebook.group')">
+                <img src="{{ url_for('static', filename='img/Filter Icons/Facebook.png') }}" alt="Facebook" class="filter-icon">
+                <span class="filter-text">Facebook</span>
+            </button>
+        </div>
+    </div>
 
     <!-- Tab Content -->
     <div class="tab-content" id="viewTabsContent">
@@ -82,37 +50,47 @@
         <div class="tab-pane fade show active" id="list-view" role="tabpanel" aria-labelledby="list-tab">
             <div class="list-group">
                 {% for event in events %}
-                <div class="list-group-item list-group-item-action py-2" data-event-id="{{ event.id }}">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <div class="flex-grow-1 me-3">
-                            <div class="d-flex align-items-center">
-                                <h6 class="mb-0">{{ event.title }}</h6>
-                                <small class="text-muted ms-2 source-name">[{{ event.source_name }}]</small>
-                            </div>
-                            <div class="d-flex align-items-center small text-muted">
-                                <span class="me-2" data-event-time="{{ event.start_time.isoformat() }}">
-                                    {{ event.start_time.strftime('%Y-%m-%d %H:%M') }}
-                                </span>
-                                {% if event.location %}
-                                <span>📍 {{ event.location }}</span>
-                                {% endif %}
+                <div class="list-group-item" data-event-id="{{ event.id }}">
+                    <div class="list-entry-container">
+                        <div class="list-entry-main text-decoration-none text-body">
+                            <div class="d-flex justify-content-between align-items-start">
+                                <div class="flex-grow-1">
+                                    <h6 class="mb-1 d-flex align-items-center gap-2">
+                                        {{ event.title }}
+                                    </h6>
+                                    <div class="d-flex align-items-center small text-muted gap-2">
+                                        <span data-event-time="{{ event.start_time.isoformat() }}">
+                                            {{ event.start_time.strftime('%Y-%m-%d %H:%M') }}
+                                        </span>
+                                        {% if event.location %}
+                                        <span>📍 {{ event.location }}</span>
+                                        {% endif %}
+                                    </div>
+                                </div>
                             </div>
                         </div>
-                        <div class="d-flex align-items-center">
-                            {% if event.source_url %}
-                            <a href="{{ event.source_url }}" class="btn btn-sm btn-link text-decoration-none me-2" title="Event Details" target="_blank">
-                                <i class="bi bi-box-arrow-up-right"></i>
-                            </a>
-                            {% endif %}
+                        <div class="list-entry-button list-entry-link">
+                            <button onclick="window.open('{{ event.source_url if event.source_url else '#' }}', '_blank')" 
+                                    class="btn btn-link text-decoration-none"
+                                    title="View Event">
+                                <span class="source-text">See on</span>
+                                <img src="{{ url_for('static', filename='img/Filter Icons/' + {
+                                    'peoply.app': 'Peoply.png',
+                                    'ifinavet.no': 'Navet.png',
+                                    'facebook.group': 'Facebook.png'
+                                }[event.source_name]) }}" alt="{{ event.source_name }}" class="source-icon">
+                            </button>
+                        </div>
+                        <div class="list-entry-button list-entry-calendar">
                             <button onclick="addToCalendar(this)" 
                                     data-event-title="{{ event.title }}"
                                     data-event-start="{{ event.start_time.isoformat() }}"
                                     data-event-end="{% if event.end_time %}{{ event.end_time.isoformat() }}{% endif %}"
                                     data-event-location="{% if event.location %}{{ event.location }}{% endif %}"
                                     data-event-description="{{ event.description }}"
-                                    class="btn btn-sm btn-link text-decoration-none"
+                                    class="btn btn-link text-decoration-none"
                                     title="Add to Calendar">
-                                <i class="bi bi-calendar-plus"></i>
+                                <i class="bi bi-calendar-plus-fill"></i>
                             </button>
                         </div>
                     </div>
@@ -205,6 +183,234 @@
     </div>
 </div>
 
+<style>
+.filter-icon {
+    height: 20px;
+    width: 20px;
+    object-fit: contain;
+    margin-right: 4px;
+    vertical-align: text-bottom;
+}
+
+.source-filter .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 12px;
+}
+
+/* Hide text on mobile */
+@media (max-width: 576px) {
+    .filter-text {
+        display: none;
+    }
+    
+    .source-filter .btn {
+        padding: 6px 10px;
+    }
+    
+    .filter-icon {
+        margin-right: 0;
+    }
+}
+
+.source-icon {
+    height: 16px;
+    width: 16px;
+    object-fit: contain;
+    vertical-align: text-bottom;
+}
+
+.list-group-item {
+    transition: background-color 0.15s ease-in-out;
+    padding: 0 !important; /* Override Bootstrap padding */
+}
+
+.list-group-item:hover {
+    background-color: #f8f9fa;
+}
+
+.list-group-item .btn {
+    opacity: 0.7;
+}
+
+.list-group-item:hover .btn {
+    opacity: 1;
+}
+
+/* Add these new styles for text truncation */
+.list-entry-main h6 {
+    margin-bottom: 0.25rem !important;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+}
+
+.list-entry-main .text-muted {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+}
+
+.list-entry-main .flex-grow-1 {
+    min-width: 0; /* Enable text truncation in flex container */
+    width: 100%; /* Ensure it takes full width */
+    overflow: hidden; /* Contain the content */
+}
+
+.list-entry-container {
+    display: flex;
+    width: 100%;
+    height: 3.5rem; /* Fixed height for all list items */
+}
+
+.list-entry-main {
+    flex: 1;
+    min-width: 0; /* Prevent flex item from overflowing */
+    padding: 0.5rem 1rem;
+    display: flex;
+    align-items: center;
+    overflow: hidden; /* Contain all content */
+}
+
+.list-entry-main > div {
+    width: 100%; /* Ensure the inner div takes full width */
+    overflow: hidden; /* Contain its content */
+}
+
+.d-flex.justify-content-between {
+    width: 100%; /* Ensure it takes full width */
+    overflow: hidden; /* Contain the content */
+}
+
+.list-entry-button {
+    width: 12%;  /* Width for the source button */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 0.15s ease-in-out;
+}
+
+.list-entry-button.list-entry-calendar {
+    width: 8%;  /* Smaller width for calendar button */
+}
+
+.list-entry-button .btn {
+    width: 100%;
+    height: 100%;
+    padding: 0 8px;  /* Added horizontal padding */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.list-entry-button.list-entry-calendar .btn {
+    color: white !important;
+}
+
+.list-entry-button.list-entry-link .btn {
+    color: #495057 !important;
+}
+
+/* Remove the general hover rules */
+.list-entry-button .btn i {
+    color: white !important;
+    font-size: 1.2rem;
+    opacity: 0.85;
+    transition: opacity 0.15s ease-in-out;
+}
+
+/* Update source icon size for the link button */
+.list-entry-button .source-icon {
+    height: 20px;
+    width: 20px;
+    object-fit: contain;
+    opacity: 0.85;
+    transition: opacity 0.15s ease-in-out;
+}
+
+@media (max-width: 768px) {
+    .list-entry-button {
+        width: 16.666667%;
+    }
+    
+    .list-entry-button.list-entry-calendar {
+        width: 16.666667%;  /* Same width as source button on mobile */
+    }
+    
+    .list-entry-button .btn {
+        padding: 0;
+    }
+}
+
+/* Specific hover rules for each button */
+.list-entry-link {
+    background-color: #f8f9fa;
+    border-left: 1px solid rgba(0,0,0,.1);
+}
+
+.list-entry-link:hover {
+    background-color: #e9ecef;
+}
+
+.list-entry-link:hover .source-icon {
+    opacity: 1;
+}
+
+.list-entry-calendar {
+    background-color: var(--bs-primary);
+    border-left: 1px solid rgba(0,0,0,.1);
+}
+
+.list-entry-calendar:hover {
+    background-color: #3d8bfd;
+}
+
+.list-entry-calendar:hover .btn i {
+    opacity: 1;
+}
+
+@media (max-width: 768px) {
+    .list-entry-button {
+        width: 16.666667%; /* 1/6 of the width */
+    }
+}
+
+/* Add these new styles for time display */
+.time-long {
+    display: inline;
+}
+
+.time-short {
+    display: none;
+}
+
+@media (max-width: 576px) {
+    .time-long {
+        display: none;
+    }
+    
+    .time-short {
+        display: inline;
+    }
+}
+
+/* Add styles for the source text and calendar text */
+.source-text, .calendar-text {
+    margin-right: 8px;
+    color: #495057;
+}
+
+@media (max-width: 768px) {
+    .source-text, .calendar-text {
+        display: none;
+        margin-right: 0;
+    }
+}
+</style>
+
 <!-- Calendar Events Data -->
 <script>
     // Store all events data for filtering
@@ -239,15 +445,23 @@
         const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
         const diffHours = Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
         
+        let longFormat, shortFormat;
+        
         if (diffDays > 0) {
-            return `in ${diffDays} day${diffDays > 1 ? 's' : ''}`;
+            longFormat = `in ${diffDays} day${diffDays > 1 ? 's' : ''}`;
+            shortFormat = `in ${diffDays}d`;
         } else if (diffHours > 0) {
-            return `in ${diffHours} hour${diffHours > 1 ? 's' : ''}`;
+            longFormat = `in ${diffHours} hour${diffHours > 1 ? 's' : ''}`;
+            shortFormat = `in ${diffHours}h`;
         } else if (diffMs > 0) {
-            return 'starting soon';
+            longFormat = 'starting soon';
+            shortFormat = 'soon';
         } else {
-            return 'ongoing';
+            longFormat = 'ongoing';
+            shortFormat = 'now';
         }
+        
+        return `<span class="time-long">${longFormat}</span><span class="time-short">${shortFormat}</span>`;
     }
 
     function escapeHtml(unsafe) {
@@ -262,33 +476,43 @@
     function renderListView() {
         const container = document.querySelector('#list-view .list-group');
         container.innerHTML = window.currentEvents.map(event => `
-            <div class="list-group-item list-group-item-action py-2" data-event-id="${event.id}">
-                <div class="d-flex justify-content-between align-items-center">
-                    <div class="flex-grow-1 me-3">
-                        <div class="d-flex align-items-center">
-                            <h6 class="mb-0">${escapeHtml(event.title)}</h6>
-                            <small class="text-muted ms-2 source-name">[${event.source_name}]</small>
-                        </div>
-                        <div class="d-flex align-items-center small text-muted">
-                            <span class="me-2" data-event-time="${event.start}">${formatRelativeTime(event.start)}</span>
-                            ${event.location ? `<span>📍 ${escapeHtml(event.location)}</span>` : ''}
+            <div class="list-group-item" data-event-id="${event.id}">
+                <div class="list-entry-container">
+                    <div class="list-entry-main text-decoration-none text-body">
+                        <div class="d-flex justify-content-between align-items-start">
+                            <div class="flex-grow-1">
+                                <h6 class="mb-1 d-flex align-items-center gap-2">
+                                    ${escapeHtml(event.title)}
+                                </h6>
+                                <div class="d-flex align-items-center small text-muted gap-2">
+                                    <span data-event-time="${event.start}">${formatRelativeTime(event.start)}</span>
+                                    ${event.location ? `<span>📍 ${escapeHtml(event.location)}</span>` : ''}
+                                </div>
+                            </div>
                         </div>
                     </div>
-                    <div class="d-flex align-items-center">
-                        ${event.url ? `
-                            <a href="${event.url}" class="btn btn-sm btn-link text-decoration-none me-2" title="Event Details" target="_blank">
-                                <i class="bi bi-box-arrow-up-right"></i>
-                            </a>
-                        ` : ''}
+                    <div class="list-entry-button list-entry-link">
+                        <button onclick="window.open('${event.url || '#'}', '_blank')" 
+                                class="btn btn-link text-decoration-none"
+                                title="View Event">
+                            <span class="source-text">See on</span>
+                            <img src="/static/img/Filter Icons/${
+                                event.source_name === 'peoply.app' ? 'Peoply.png' :
+                                event.source_name === 'ifinavet.no' ? 'Navet.png' :
+                                'Facebook.png'
+                            }" alt="${event.source_name}" class="source-icon">
+                        </button>
+                    </div>
+                    <div class="list-entry-button list-entry-calendar">
                         <button onclick="addToCalendar(this)" 
                                 data-event-title="${escapeHtml(event.title)}"
                                 data-event-start="${event.start}"
                                 data-event-end="${event.end || ''}"
                                 data-event-location="${event.location ? escapeHtml(event.location) : ''}"
                                 data-event-description="${event.description ? escapeHtml(event.description) : ''}"
-                                class="btn btn-sm btn-link text-decoration-none"
+                                class="btn btn-link text-decoration-none"
                                 title="Add to Calendar">
-                            <i class="bi bi-calendar-plus"></i>
+                            <i class="bi bi-calendar-plus-fill"></i>
                         </button>
                     </div>
                 </div>
@@ -420,9 +644,6 @@
         // Clean up the source string to remove any hidden characters
         source = source.trim().replace(/[\u2013\u2014]/g, '');
         
-        console.log('Filtering for source:', source);
-        console.log('All events before filtering:', window.allEventsBackup);
-        
         // Update button states
         document.querySelectorAll('.source-filter .btn').forEach(btn => {
             btn.classList.remove('active');
@@ -434,14 +655,7 @@
         // Filter events
         window.currentEvents = source === 'all' 
             ? [...window.allEventsBackup]
-            : window.allEventsBackup.filter(event => {
-                console.log('Checking event:', event);
-                console.log('Event source_name:', event.source_name);
-                console.log('Comparing with:', source);
-                return event.source_name === source;
-              });
-
-        console.log('Filtered events:', window.currentEvents);
+            : window.allEventsBackup.filter(event => event.source_name === source);
 
         // Update URL without reloading
         const url = new URL(window.location);
@@ -496,14 +710,6 @@
                 }
             });
         });
-        
-        // Set up periodic refresh of relative times
-        setInterval(() => {
-            document.querySelectorAll('[data-event-time]').forEach(el => {
-                const dateStr = el.getAttribute('data-event-time');
-                el.textContent = formatRelativeTime(dateStr);
-            });
-        }, 60000); // Update every minute
     };
 </script>
 
