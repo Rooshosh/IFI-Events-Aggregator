@@ -1,6 +1,6 @@
 from datetime import datetime
 from flask import Blueprint, render_template, request, make_response
-from sqlalchemy import select
+from sqlalchemy import select, or_
 from icalendar import Calendar, Event as ICalEvent
 from ...models.event import Event
 from ...db import db_manager
@@ -14,8 +14,12 @@ def index():
     """Main page showing all upcoming events"""
     with db_manager.session() as db:
         # Query for all upcoming events
+        now = now_oslo()
         stmt = select(Event).where(
-            Event.end_time > datetime.now()
+            or_(
+                Event.end_time > now,  # Event hasn't ended yet
+                Event.start_time > now  # Event hasn't started yet (for events with no end time)
+            )
         ).order_by(Event.start_time.asc())
         
         events = db.execute(stmt).scalars().all()
@@ -33,8 +37,12 @@ def ics_feed():
     
     with db_manager.session() as db:
         # Query for upcoming events
+        now = now_oslo()
         stmt = select(Event).where(
-            Event.start_time > now_oslo()
+            or_(
+                Event.end_time > now,  # Event hasn't ended yet
+                Event.start_time > now  # Event hasn't started yet (for events with no end time)
+            )
         ).order_by(Event.start_time.asc())
         
         events = db.execute(stmt).scalars().all()

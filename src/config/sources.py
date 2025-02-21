@@ -1,5 +1,10 @@
 from dataclasses import dataclass
 from typing import Dict, Any, Optional
+import os
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 @dataclass
 class SourceConfig:
@@ -9,6 +14,14 @@ class SourceConfig:
     base_url: str
     scraper_class: str  # Full path to scraper class
     settings: Optional[Dict[str, Any]] = None
+
+# OpenAI configuration for event parsing
+OPENAI_CONFIG = {
+    'api_key': os.getenv('OPENAI_API_KEY'),  # OpenAI API key from environment
+    'model': os.getenv('OPENAI_MODEL', 'gpt-4o-mini'),  # Model that works with the API
+    'temperature': 0.3,  # Lower temperature for more consistent outputs
+    'max_tokens': 1000
+}
     
 # Default configurations for each source
 SOURCES = {
@@ -25,6 +38,21 @@ SOURCES = {
         base_url='https://ifinavet.no',
         scraper_class='src.scrapers.navet.NavetScraper',
         settings={}
+    ),
+    'facebook': SourceConfig(
+        name='facebook.group',
+        enabled=True,
+        base_url='https://api.brightdata.com/datasets/v3',
+        scraper_class='src.scrapers.facebook.FacebookGroupScraper',
+        settings={
+            'brightdata': {
+                'api_key': os.getenv('BRIGHTDATA_API_KEY'),
+                'dataset_id': os.getenv('BRIGHTDATA_DATASET_ID'),
+                'group_url': os.getenv('FACEBOOK_GROUP_URL', 'https://www.facebook.com/groups/ifistudenter'),
+                'num_posts': int(os.getenv('FACEBOOK_NUM_POSTS', '10'))
+            },
+            'openai': OPENAI_CONFIG
+        }
     )
 }
 

@@ -18,6 +18,7 @@ class DuplicateConfig:
         require_exact_time: bool = False,  # Whether times must match exactly
         ignore_case: bool = True,  # Whether to ignore case in string comparisons
         normalize_whitespace: bool = True,  # Whether to normalize whitespace in strings
+        require_same_source: bool = True,  # Whether events must be from the same source
     ):
         self.title_similarity_threshold = title_similarity_threshold
         self.time_window_minutes = time_window_minutes
@@ -25,6 +26,7 @@ class DuplicateConfig:
         self.require_exact_time = require_exact_time
         self.ignore_case = ignore_case
         self.normalize_whitespace = normalize_whitespace
+        self.require_same_source = require_same_source
 
 # Special merge strategies for specific fields
 EVENT_MERGE_STRATEGIES: Dict[str, Callable[[Event, Event], Any]] = {
@@ -71,6 +73,11 @@ def are_events_duplicate(event1: Event, event2: Event, config: DuplicateConfig =
     Check if two events are duplicates based on the given configuration.
     Returns True if events are considered duplicates, False otherwise.
     """
+    # Check source if required
+    if config.require_same_source:
+        if not event1.source_name or not event2.source_name or event1.source_name != event2.source_name:
+            return False
+    
     # Check title similarity
     title_similarity = calculate_title_similarity(event1.title, event2.title, config)
     if title_similarity < config.title_similarity_threshold:

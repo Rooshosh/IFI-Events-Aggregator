@@ -10,8 +10,10 @@ iniconfig==2.0.0
 itsdangerous==2.2.0
 Jinja2==3.1.5
 MarkupSafe==3.0.2
+openai==1.12.0
 packaging==24.2
 pluggy==1.5.0
+python-dotenv==1.0.0
 pytest==8.3.4
 pytest-cov==6.0.0
 pytest-flask==1.3.0
@@ -22,3 +24,11 @@ typing_extensions==4.12.2
 urllib3==2.3.0
 Werkzeug==3.1.3
 icalendar==5.0.11
+
+# OpenAI dependencies
+anyio>=4.0.0
+distro>=1.8.0
+httpx>=0.23.0
+pydantic>=2.0.0
+sniffio>=1.1.0
+tqdm>=4.64.0
