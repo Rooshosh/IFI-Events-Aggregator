@@ -82,8 +82,7 @@ def are_events_duplicate(event1: Event, event2: Event, config: DuplicateConfig =
 
 # Special merge strategies for specific fields
 EVENT_MERGE_STRATEGIES: Dict[str, Callable[[Event, Event], Any]] = {
-    'id': lambda e1, e2: (e1.id if (e1.created_at and e2.created_at and e1.created_at < e2.created_at) 
-                         else (e2.id if e2.created_at else e1.id)),
+    'id': lambda e1, e2: e1.id or e2.id,  # Always keep an existing ID, never None
     'description': lambda e1, e2: (
         f"{e1.description}\n\nAlternative description:\n{e2.description}"
         if (e2.description and e2.description != e1.description)
@@ -100,10 +99,9 @@ EVENT_MERGE_STRATEGIES: Dict[str, Callable[[Event, Event], Any]] = {
         else (e1.source_name or e2.source_name)
         # If they have different sources, join them (this should rarely happen due to require_same_source)
     ),
-    'attachments': lambda e1, e2: (
-        list(set(e1.attachments or []) | set(e2.attachments or []))  # Combine unique attachments from both events
-        if (e1.attachments or e2.attachments)
-        else []
+    'attachment': lambda e1, e2: (
+        # Keep the attachment from the newer event if it has one, otherwise keep the older one
+        e2.attachment if e2.attachment else e1.attachment
     ),
     'author': lambda e1, e2: (
         f"{e1.author}, {e2.author}"
@@ -218,9 +216,10 @@ def deduplicate_database(config: DuplicateConfig = DuplicateConfig(), source_nam
         
         # Add merged events back to database as new instances
         for event in merged_events:
-            # Create a new Event instance with the same data, excluding SQLAlchemy's internal attributes and id
+            # Create a new Event instance with the same data, excluding SQLAlchemy's internal attributes
+            # Note: We now keep the id if it exists
             event_data = {k: v for k, v in event.__dict__.items() 
-                        if not k.startswith('_') and k != 'id'}
+                        if not k.startswith('_')}
             new_event = Event(**event_data)
             db.add(new_event)
         

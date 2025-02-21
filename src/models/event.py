@@ -5,6 +5,7 @@ from typing import Optional, Dict, Any, List
 from sqlalchemy import Column, Integer, String, Text, DateTime, event, JSON
 from sqlalchemy.orm import validates
 from sqlalchemy import event as sa_event
+import json
 
 from ..db.model import Base
 from ..utils.timezone import ensure_oslo_timezone, DEFAULT_TIMEZONE, now_oslo
@@ -44,7 +45,7 @@ class Event(Base):
         registration_opens: When registration opens (optional)
         registration_url: URL for registration if different from source_url (optional)
         food: Description of food/refreshments if provided (optional)
-        attachments: List of URLs to any attachments (optional)
+        attachment: URL to the event's primary image/attachment
         author: Name of the student club or person that created the event (optional)
     """
     __tablename__ = 'events'
@@ -67,19 +68,24 @@ class Event(Base):
     registration_opens = Column(DateTime(timezone=True))
     registration_url = Column(String)
     food = Column(String)
-    attachments = Column(JSON, default=list)  # List of attachment URLs
+    attachment = Column(String)  # URL to the event's primary image/attachment
     author = Column(String)  # Student club or person that created the event
     
     def __init__(self, **kwargs):
         """Initialize an Event with the given attributes."""
+        # Handle old attachments field if present
+        if 'attachments' in kwargs:
+            attachments = kwargs.pop('attachments')
+            if attachments:
+                if isinstance(attachments, list) and attachments:
+                    kwargs['attachment'] = attachments[0]
+                elif isinstance(attachments, str):
+                    kwargs['attachment'] = attachments
+        
         # Ensure timezone-aware datetimes and convert to Oslo time
         for field in ['start_time', 'end_time', 'registration_opens', 'created_at', 'fetched_at']:
             if field in kwargs:
                 kwargs[field] = ensure_oslo_timezone(kwargs[field])
-        
-        # Ensure attachments is a list
-        if 'attachments' in kwargs and kwargs['attachments'] is None:
-            kwargs['attachments'] = []
         
         super().__init__(**kwargs)
     
@@ -87,15 +93,6 @@ class Event(Base):
     def validate_datetime(self, key, value):
         """Ensure all datetime fields are in Europe/Oslo timezone."""
         return ensure_oslo_timezone(value)
-    
-    @validates('attachments')
-    def validate_attachments(self, key, value):
-        """Ensure attachments is always a list."""
-        if value is None:
-            return []
-        if not isinstance(value, list):
-            raise ValueError("Attachments must be a list of URLs")
-        return value
     
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'Event':
@@ -116,7 +113,7 @@ class Event(Base):
             registration_opens=data.get('registration_opens'),
             registration_url=data.get('registration_url'),
             food=data.get('food'),
-            attachments=data.get('attachments'),
+            attachment=data.get('attachment'),
             author=data.get('author')
         )
     
@@ -138,7 +135,7 @@ class Event(Base):
             'registration_opens': self.registration_opens,
             'registration_url': self.registration_url,
             'food': self.food,
-            'attachments': self.attachments,
+            'attachment': self.attachment,
             'author': self.author
         }
     
@@ -171,20 +168,8 @@ class Event(Base):
             lines.append(f"Registration Opens: {self.registration_opens.strftime('%Y-%m-%d %H:%M')}")
         if self.registration_url and self.registration_url != self.source_url:
             lines.append(f"Registration URL: {self.registration_url}")
-        if self.attachments:
-            # Extract URLs from attachments, handling both strings and dictionaries
-            urls = []
-            for attachment in self.attachments:
-                if isinstance(attachment, str):
-                    urls.append(attachment)
-                elif isinstance(attachment, dict):
-                    # Try to get URL from dictionary
-                    if 'url' in attachment:
-                        urls.append(attachment['url'])
-                    elif 'attachment_url' in attachment:
-                        urls.append(attachment['attachment_url'])
-            if urls:
-                lines.append(f"Attachments: {', '.join(urls)}")
+        if self.attachment:
+            lines.append(f"Attachment: {self.attachment}")
         
         # Add description at the end
         if self.description:

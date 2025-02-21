@@ -259,33 +259,30 @@ class FacebookGroupScraper(BaseScraper):
                     end_time = None
             
             # Get attachments (combine all relevant sources)
-            attachments = []
+            attachment = None
+            
+            # First try to get an image URL from attachments
             if post.get('attachments'):
-                # Extract URLs from attachment dictionaries
-                for attachment in post['attachments']:
-                    if isinstance(attachment, dict):
-                        # Get the main attachment URL
-                        if 'url' in attachment:
-                            attachments.append(attachment['url'])
-                        # Get the event/external URL if available
-                        if 'attachment_url' in attachment:
-                            attachments.append(attachment['attachment_url'])
-                    elif isinstance(attachment, str):
-                        attachments.append(attachment)
+                for att in post['attachments']:
+                    if isinstance(att, dict):
+                        # Prefer actual image URLs over Facebook event links
+                        if 'url' in att and 'attachment_url' not in att:  # Skip if it's a Facebook event
+                            attachment = att['url']
+                            break
+                        elif isinstance(att, str):
+                            attachment = att
+                            break
             
-            # Add post external image if available
-            if post.get('post_external_image'):
+            # If no image found in attachments, try post_external_image
+            if not attachment and post.get('post_external_image'):
                 if isinstance(post['post_external_image'], dict) and 'url' in post['post_external_image']:
-                    attachments.append(post['post_external_image']['url'])
+                    attachment = post['post_external_image']['url']
                 elif isinstance(post['post_external_image'], str):
-                    attachments.append(post['post_external_image'])
+                    attachment = post['post_external_image']
             
-            # Add external link if available and not already in attachments
-            if post.get('post_external_link') and post['post_external_link'] not in attachments:
-                attachments.append(post['post_external_link'])
-            
-            # Remove duplicates while preserving order
-            attachments = list(dict.fromkeys(attachments))
+            # Finally, try post_external_link if no images found
+            if not attachment and post.get('post_external_link'):
+                attachment = post['post_external_link']
             
             # Convert post date to datetime with timezone
             created_at = None
@@ -304,7 +301,7 @@ class FacebookGroupScraper(BaseScraper):
                 source_url=post.get('url', ''),
                 source_name=self.name(),
                 author=post.get('user_username_raw'),  # Direct mapping from post author
-                attachments=attachments,  # Combined attachments list
+                attachment=attachment,  # Primary attachment URL
                 created_at=created_at  # Post creation date
             )
             
