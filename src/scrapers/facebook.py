@@ -258,12 +258,34 @@ class FacebookGroupScraper(BaseScraper):
                     # If end_time is invalid, keep it as None
                     end_time = None
             
-            # Get attachments (combine both sources if available)
+            # Get attachments (combine all relevant sources)
             attachments = []
             if post.get('attachments'):
-                attachments.extend(post['attachments'])
+                # Extract URLs from attachment dictionaries
+                for attachment in post['attachments']:
+                    if isinstance(attachment, dict):
+                        # Get the main attachment URL
+                        if 'url' in attachment:
+                            attachments.append(attachment['url'])
+                        # Get the event/external URL if available
+                        if 'attachment_url' in attachment:
+                            attachments.append(attachment['attachment_url'])
+                    elif isinstance(attachment, str):
+                        attachments.append(attachment)
+            
+            # Add post external image if available
             if post.get('post_external_image'):
-                attachments.append(post['post_external_image'])
+                if isinstance(post['post_external_image'], dict) and 'url' in post['post_external_image']:
+                    attachments.append(post['post_external_image']['url'])
+                elif isinstance(post['post_external_image'], str):
+                    attachments.append(post['post_external_image'])
+            
+            # Add external link if available and not already in attachments
+            if post.get('post_external_link') and post['post_external_link'] not in attachments:
+                attachments.append(post['post_external_link'])
+            
+            # Remove duplicates while preserving order
+            attachments = list(dict.fromkeys(attachments))
             
             # Convert post date to datetime with timezone
             created_at = None

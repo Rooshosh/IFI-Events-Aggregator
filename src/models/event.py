@@ -172,7 +172,19 @@ class Event(Base):
         if self.registration_url and self.registration_url != self.source_url:
             lines.append(f"Registration URL: {self.registration_url}")
         if self.attachments:
-            lines.append(f"Attachments: {', '.join(self.attachments)}")
+            # Extract URLs from attachments, handling both strings and dictionaries
+            urls = []
+            for attachment in self.attachments:
+                if isinstance(attachment, str):
+                    urls.append(attachment)
+                elif isinstance(attachment, dict):
+                    # Try to get URL from dictionary
+                    if 'url' in attachment:
+                        urls.append(attachment['url'])
+                    elif 'attachment_url' in attachment:
+                        urls.append(attachment['attachment_url'])
+            if urls:
+                lines.append(f"Attachments: {', '.join(urls)}")
         
         # Add description at the end
         if self.description:
