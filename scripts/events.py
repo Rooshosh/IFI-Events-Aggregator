@@ -169,8 +169,7 @@ def fetch_events(
     quiet: bool = False,
     snapshot_id: Optional[str] = None,
     debug: bool = False,
-    facebook_config: Optional[Dict[str, Any]] = None,
-    days: int = 1
+    facebook_config: Optional[Dict[str, Any]] = None
 ) -> List[Event]:
     """
     Fetch events from specified source(s).
@@ -184,7 +183,6 @@ def fetch_events(
         snapshot_id: Optional snapshot ID for Facebook scraper
         debug: Whether to show debug information
         facebook_config: Optional configuration for Facebook scraper
-        days: Number of days to fetch for Facebook (default: 1 for today only)
     """
     # Set logging levels based on quiet mode
     if quiet:
@@ -416,8 +414,6 @@ def main():
                             help='Use an existing snapshot ID for Facebook scraper')
     fetch_parser.add_argument('--debug', action='store_true',
                             help='Show debug information')
-    fetch_parser.add_argument('--days', type=int, default=1,
-                            help='Number of days to fetch for Facebook (default: 1)')
     
     list_parser = subparsers.add_parser('list', help='List events from database')
     list_parser.add_argument('source', choices=list(VALID_SOURCES.keys()),
@@ -552,8 +548,7 @@ def main():
                     quiet=args.quiet,
                     snapshot_id=args.snapshot_id if source == 'facebook' else None,
                     debug=args.debug,
-                    facebook_config=facebook_config if source == 'facebook' else None,
-                    days=args.days if source == 'facebook' else 1
+                    facebook_config=facebook_config if source == 'facebook' else None
                 )
                 
         elif args.command == 'list':

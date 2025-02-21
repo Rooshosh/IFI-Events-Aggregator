@@ -42,6 +42,7 @@ class FacebookGroupScraper(BaseScraper):
             "include_errors": "true",
         }
         self.group_url = brightdata_config['group_url']
+        self.days_to_fetch = brightdata_config.get('days_to_fetch', 1)  # Default to 1 if not specified
         
         self.cache_config = cache_config or CacheConfig()
         self.cache_manager = CacheManager(self.cache_config.cache_dir)
@@ -90,28 +91,24 @@ class FacebookGroupScraper(BaseScraper):
         finally:
             db.close()
 
-    def _trigger_scrape(self, days_to_fetch: int = 1) -> Optional[str]:
+    def _trigger_scrape(self) -> Optional[str]:
         """
         Trigger a new scrape of the Facebook group.
-        
-        Args:
-            days_to_fetch: Number of days to fetch (default: 1 for today only)
-                          For example, 2 would fetch today and yesterday
         
         Returns:
             snapshot_id if successful, None otherwise.
         """
         try:
-            # Get date range in MM-DD-YYYY format
+            # Get date range in Oslo timezone
             end_date = now_oslo()
-            start_date = end_date - timedelta(days=days_to_fetch - 1)
+            start_date = end_date - timedelta(days=self.days_to_fetch - 1)
             
-            # Format dates for API
+            # Format dates for API in MM-DD-YYYY format
             start_date_str = start_date.strftime("%m-%d-%Y")
             end_date_str = end_date.strftime("%m-%d-%Y")
             
             # Get URLs from the specified timeframe and extract post IDs
-            urls = self._get_event_urls_for_timeframe(num_days=days_to_fetch)
+            urls = self._get_event_urls_for_timeframe(num_days=self.days_to_fetch)
             posts_to_exclude = [self._extract_post_id(url) for url in urls if url and self._extract_post_id(url)]
             
             data = [
@@ -189,27 +186,6 @@ class FacebookGroupScraper(BaseScraper):
             logger.error(f"Error checking status for snapshot {snapshot_id}: {e}")
             return False
     
-    def _get_results(self, snapshot_id: str) -> Optional[List[Dict[str, Any]]]:
-        """
-        Retrieve the results of a completed scrape.
-        Returns the list of posts if successful, None otherwise.
-        """
-        try:
-            response = requests.get(
-                f"{self.base_url}/snapshot/{snapshot_id}",
-                headers=self.headers,
-                params={"format": "json"}
-            )
-            response.raise_for_status()
-            results = response.json()
-            
-            logger.info(f"Successfully retrieved results for snapshot {snapshot_id}")
-            return results
-            
-        except Exception as e:
-            logger.error(f"Error retrieving results for snapshot {snapshot_id}: {e}")
-            return None
-    
     def _fetch_posts_from_snapshot(self, snapshot_id: str) -> str:
         """
         Fetch posts directly from an existing snapshot ID.
@@ -221,6 +197,19 @@ class FacebookGroupScraper(BaseScraper):
                 headers=self.headers,
                 params={"format": "json"}
             )
+            
+            # Debug logging for request
+            logger.info(f"Fetching snapshot with:")
+            logger.info(f"URL: {self.base_url}/snapshot/{snapshot_id}")
+            logger.info(f"Headers: {self.headers}")
+            logger.info(f"Params: {{'format': 'json'}}")
+            
+            # Handle empty snapshots (returns 400 with "Snapshot is empty" message)
+            if response.status_code == 400 and response.text.strip() == "Snapshot is empty":
+                logger.info(f"Snapshot {snapshot_id} is empty, returning empty list")
+                return json.dumps([])
+            
+            # For all other responses, check status code
             response.raise_for_status()
             results = response.json()
             
@@ -232,7 +221,7 @@ class FacebookGroupScraper(BaseScraper):
             raise
     
     @cached_request(cache_key="latest_posts")
-    def _fetch_posts(self, url: str = None, snapshot_id: str = None, days_to_fetch: int = 1) -> str:
+    def _fetch_posts(self, url: str = None, snapshot_id: str = None) -> str:
         """
         Fetch posts from the Facebook group.
         
@@ -241,7 +230,6 @@ class FacebookGroupScraper(BaseScraper):
                  Not actually used since we're using cache_key.
             snapshot_id: Optional snapshot ID to fetch from directly.
                         If provided, skips triggering a new scrape.
-            days_to_fetch: Number of days to fetch (default: 1 for today only)
         """
         # If snapshot_id is provided, fetch directly from it
         if snapshot_id:
@@ -251,7 +239,7 @@ class FacebookGroupScraper(BaseScraper):
         url = url or f"{self.base_url}/trigger"
         
         # Trigger new scrape
-        snapshot_id = self._trigger_scrape(days_to_fetch=days_to_fetch)
+        snapshot_id = self._trigger_scrape()
         if not snapshot_id:
             raise Exception("Failed to trigger scrape")
         
@@ -371,20 +359,18 @@ class FacebookGroupScraper(BaseScraper):
             logger.error(f"Error creating Event object: {e}")
             return None
     
-    def get_events(self, snapshot_id: str = None, days_to_fetch: int = 1) -> List[Event]:
+    def get_events(self, snapshot_id: str = None) -> List[Event]:
         """
         Get events from Facebook group posts.
         
         Args:
             snapshot_id: Optional snapshot ID to fetch from directly
-            days_to_fetch: Number of days to fetch (default: 1 for today only)
         """
         try:
             # Fetch posts (using cache if available)
             posts_json = self._fetch_posts(
                 url=self.base_url + "/trigger",
-                snapshot_id=snapshot_id,
-                days_to_fetch=days_to_fetch
+                snapshot_id=snapshot_id
             )
             posts = json.loads(posts_json)
             
