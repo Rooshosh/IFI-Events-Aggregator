@@ -1,6 +1,6 @@
 """Scraper for Facebook group posts using BrightData's API."""
 
-from datetime import datetime
+from datetime import datetime, timedelta
 import logging
 import time
 from typing import List, Optional, Dict, Any
@@ -13,6 +13,7 @@ from ..utils.decorators import cached_request
 from ..utils.timezone import now_oslo, ensure_oslo_timezone
 from ..config.sources import SOURCES
 from ..utils.llm import init_openai, is_event_post, parse_event_details
+from ..db import get_db
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +42,6 @@ class FacebookGroupScraper(BaseScraper):
             "include_errors": "true",
         }
         self.group_url = brightdata_config['group_url']
-        self.num_posts = brightdata_config['num_posts']
         
         self.cache_config = cache_config or CacheConfig()
         self.cache_manager = CacheManager(self.cache_config.cache_dir)
@@ -57,18 +57,69 @@ class FacebookGroupScraper(BaseScraper):
         """Return the name of the scraper."""
         return SOURCES['facebook'].name
     
-    def _trigger_scrape(self) -> Optional[str]:
+    def _extract_post_id(self, url: str) -> Optional[str]:
+        """Extract the post ID from a Facebook post URL."""
+        if not url:
+            return None
+        try:
+            return url.split('/posts/')[-1].strip('/')
+        except Exception:
+            logger.warning(f"Could not extract post ID from URL: {url}")
+            return None
+
+    def _get_event_urls_for_timeframe(self, num_days: int = 1) -> List[str]:
+        """
+        Get source URLs of events from the last N days.
+        
+        Args:
+            num_days: Number of days to look back (default: 1 for today only)
+        """
+        db = get_db()
+        try:
+            # Get date range in Oslo timezone
+            end_date = now_oslo().date()
+            start_date = end_date - timedelta(days=num_days - 1)
+            
+            # Query for events in date range
+            events = db.query(Event).filter(
+                Event.source_name == self.name(),
+                Event.created_at >= start_date
+            ).all()
+            
+            return [event.source_url for event in events if event.source_url]
+        finally:
+            db.close()
+
+    def _trigger_scrape(self, days_to_fetch: int = 1) -> Optional[str]:
         """
         Trigger a new scrape of the Facebook group.
-        Returns the snapshot_id if successful, None otherwise.
+        
+        Args:
+            days_to_fetch: Number of days to fetch (default: 1 for today only)
+                          For example, 2 would fetch today and yesterday
+        
+        Returns:
+            snapshot_id if successful, None otherwise.
         """
         try:
+            # Get date range in MM-DD-YYYY format
+            end_date = now_oslo()
+            start_date = end_date - timedelta(days=days_to_fetch - 1)
+            
+            # Format dates for API
+            start_date_str = start_date.strftime("%m-%d-%Y")
+            end_date_str = end_date.strftime("%m-%d-%Y")
+            
+            # Get URLs from the specified timeframe and extract post IDs
+            urls = self._get_event_urls_for_timeframe(num_days=days_to_fetch)
+            posts_to_exclude = [self._extract_post_id(url) for url in urls if url and self._extract_post_id(url)]
+            
             data = [
                 {
                     "url": self.group_url,
-                    "num_of_posts": self.num_posts,
-                    "start_date": "",
-                    "end_date": ""
+                    "start_date": start_date_str,
+                    "end_date": end_date_str,
+                    "posts_to_not_include": posts_to_exclude
                 }
             ]
             
@@ -181,7 +232,7 @@ class FacebookGroupScraper(BaseScraper):
             raise
     
     @cached_request(cache_key="latest_posts")
-    def _fetch_posts(self, url: str = None, snapshot_id: str = None) -> str:
+    def _fetch_posts(self, url: str = None, snapshot_id: str = None, days_to_fetch: int = 1) -> str:
         """
         Fetch posts from the Facebook group.
         
@@ -190,6 +241,7 @@ class FacebookGroupScraper(BaseScraper):
                  Not actually used since we're using cache_key.
             snapshot_id: Optional snapshot ID to fetch from directly.
                         If provided, skips triggering a new scrape.
+            days_to_fetch: Number of days to fetch (default: 1 for today only)
         """
         # If snapshot_id is provided, fetch directly from it
         if snapshot_id:
@@ -199,7 +251,7 @@ class FacebookGroupScraper(BaseScraper):
         url = url or f"{self.base_url}/trigger"
         
         # Trigger new scrape
-        snapshot_id = self._trigger_scrape()
+        snapshot_id = self._trigger_scrape(days_to_fetch=days_to_fetch)
         if not snapshot_id:
             raise Exception("Failed to trigger scrape")
         
@@ -319,13 +371,20 @@ class FacebookGroupScraper(BaseScraper):
             logger.error(f"Error creating Event object: {e}")
             return None
     
-    def get_events(self, snapshot_id: str = None) -> List[Event]:
-        """Get events from Facebook group posts."""
+    def get_events(self, snapshot_id: str = None, days_to_fetch: int = 1) -> List[Event]:
+        """
+        Get events from Facebook group posts.
+        
+        Args:
+            snapshot_id: Optional snapshot ID to fetch from directly
+            days_to_fetch: Number of days to fetch (default: 1 for today only)
+        """
         try:
             # Fetch posts (using cache if available)
             posts_json = self._fetch_posts(
                 url=self.base_url + "/trigger",
-                snapshot_id=snapshot_id
+                snapshot_id=snapshot_id,
+                days_to_fetch=days_to_fetch
             )
             posts = json.loads(posts_json)
             

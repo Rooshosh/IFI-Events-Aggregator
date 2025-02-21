@@ -48,8 +48,7 @@ SOURCES = {
             'brightdata': {
                 'api_key': os.getenv('BRIGHTDATA_API_KEY'),
                 'dataset_id': 'gd_lz11l67o2cb3r0lkj3',  # Brightdata dataset identifier
-                'group_url': 'https://www.facebook.com/groups/ifistudenter',
-                'num_posts': 10
+                'group_url': 'https://www.facebook.com/groups/ifistudenter'
             },
             'openai': OPENAI_CONFIG
         }
