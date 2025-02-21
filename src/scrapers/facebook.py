@@ -258,6 +258,21 @@ class FacebookGroupScraper(BaseScraper):
                     # If end_time is invalid, keep it as None
                     end_time = None
             
+            # Get attachments (combine both sources if available)
+            attachments = []
+            if post.get('attachments'):
+                attachments.extend(post['attachments'])
+            if post.get('post_external_image'):
+                attachments.append(post['post_external_image'])
+            
+            # Convert post date to datetime with timezone
+            created_at = None
+            if post.get('date_posted'):
+                try:
+                    created_at = ensure_oslo_timezone(datetime.fromisoformat(post['date_posted']))
+                except (ValueError, TypeError):
+                    logger.warning(f"Failed to parse date_posted: {post.get('date_posted')}")
+            
             event = Event(
                 title=event_data['title'],
                 description=event_data['description'],
@@ -265,7 +280,10 @@ class FacebookGroupScraper(BaseScraper):
                 end_time=end_time,
                 location=event_data.get('location'),
                 source_url=post.get('url', ''),
-                source_name=self.name()
+                source_name=self.name(),
+                author=post.get('user_username_raw'),  # Direct mapping from post author
+                attachments=attachments,  # Combined attachments list
+                created_at=created_at  # Post creation date
             )
             
             # Add food info to description if available
