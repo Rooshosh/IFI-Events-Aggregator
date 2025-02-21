@@ -47,14 +47,14 @@ class CacheManager:
             source_name: Name of the source (e.g., 'peoply.app', 'ifinavet.no')
             identifier: Unique identifier for the cached content
             suffix: Optional file extension (e.g., '.html', '.json'). If not provided,
-                   defaults to '.json' for peoply.app and '.html' for other sources.
+                   defaults to '.json' for peoply.app and facebook.group, '.html' for other sources.
         """
         # Clean the identifier to be filesystem-friendly
         clean_id = "".join(c if c.isalnum() or c in '-_' else '_' for c in identifier)
         
         # Determine file extension based on source if not provided
         if suffix is None:
-            suffix = '.json' if source_name == 'peoply.app' else '.html'
+            suffix = '.json' if source_name in ['peoply.app', 'facebook.group'] else '.html'
             
         return self.get_source_cache_dir(source_name) / f"{clean_id}{suffix}"
     
