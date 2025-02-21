@@ -51,10 +51,7 @@ def main():
                 
                 for event in events:
                     # Check for duplicates
-                    duplicate = check_duplicate_before_insert(
-                        event, 
-                        db_path=str(Path(__file__).parent.parent / 'events.db')
-                    )
+                    duplicate = check_duplicate_before_insert(event)
                     if duplicate:
                         # Use the merged event instead
                         db.merge(duplicate)
