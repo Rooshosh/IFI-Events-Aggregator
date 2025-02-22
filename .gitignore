@@ -12,6 +12,7 @@ ENV/
 .idea/
 .vscode/
 data/cache/
+logs/
 .coverage
 
 # Replit specific
