@@ -52,7 +52,7 @@
                 {% for event in events %}
                 <div class="list-group-item" data-event-id="{{ event.id }}">
                     <div class="list-entry-container">
-                        <div class="list-entry-main text-decoration-none text-body">
+                        <div class="list-entry-main text-decoration-none text-body" onclick="window.open('{{ event.source_url if event.source_url else '#' }}', '_blank')" style="cursor: pointer;">
                             <div class="d-flex justify-content-between align-items-start">
                                 <div class="flex-grow-1">
                                     <h6 class="mb-1 d-flex align-items-center gap-2">
@@ -273,6 +273,11 @@
     display: flex;
     align-items: center;
     overflow: hidden; /* Contain all content */
+    transition: background-color 0.15s ease-in-out;
+}
+
+.list-entry-main:hover {
+    background-color: #f8f9fa;
 }
 
 .list-entry-main > div {
@@ -486,7 +491,7 @@
         container.innerHTML = window.currentEvents.map(event => `
             <div class="list-group-item" data-event-id="${event.id}">
                 <div class="list-entry-container">
-                    <div class="list-entry-main text-decoration-none text-body">
+                    <div class="list-entry-main text-decoration-none text-body" onclick="window.open('${event.url || '#'}', '_blank')" style="cursor: pointer;">
                         <div class="d-flex justify-content-between align-items-start">
                             <div class="flex-grow-1">
                                 <h6 class="mb-1 d-flex align-items-center gap-2">
