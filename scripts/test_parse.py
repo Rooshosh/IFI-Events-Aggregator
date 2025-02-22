@@ -37,7 +37,7 @@ def save_event_to_db(event):
     try:
         db = get_db()
         # Check for duplicates
-        duplicate = check_duplicate_before_insert(event, db_path=str(Path(__file__).parent.parent / 'events.db'))
+        duplicate = check_duplicate_before_insert(event)
         if duplicate:
             logger.info("Found duplicate event, merging...")
             db.merge(duplicate)

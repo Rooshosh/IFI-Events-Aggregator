@@ -55,6 +55,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 from sqlalchemy import text
 import json
+from logging.handlers import RotatingFileHandler
 
 # Add src directory to Python path
 sys.path.append(str(Path(__file__).parent.parent))
@@ -66,11 +67,28 @@ from src.scrapers.facebook import FacebookGroupScraper
 from src.utils.cache import CacheConfig
 from src.models.event import Event
 from src.utils.timezone import now_oslo
-from src.utils.deduplication import check_duplicate_before_insert
+from src.utils.deduplication import check_duplicate_before_insert, deduplicate_database, DuplicateConfig
 
+# Create logs directory if it doesn't exist
+log_dir = Path(__file__).parent.parent / 'logs'
+log_dir.mkdir(exist_ok=True)
+log_file = log_dir / 'events.log'
+
+# Configure logging to both file and console
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.INFO
+    level=logging.INFO,
+    handlers=[
+        # Console handler
+        logging.StreamHandler(),
+        # File handler with rotation (keep 30 days of logs, max 10MB per file)
+        RotatingFileHandler(
+            log_file,
+            maxBytes=10*1024*1024,  # 10MB
+            backupCount=30,
+            encoding='utf-8'
+        )
+    ]
 )
 logger = logging.getLogger(__name__)
 
@@ -78,13 +96,27 @@ logger = logging.getLogger(__name__)
 for module in ['src.scrapers.peoply', 'src.scrapers.navet', 'src.db.database']:
     logging.getLogger(module).setLevel(logging.INFO)
 
+def log_separator(level='source'):
+    """Add a visual separator to the logs"""
+    if level == 'source':
+        # Shorter separator between sources with newlines
+        logger.info('\n' + '-' * 50)
+    elif level == 'fetch':
+        # Longer separator between fetch operations with more newlines
+        logger.info('\n\n' + '=' * 100)
+        logger.info(f"Starting new fetch operation at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        logger.info('=' * 100 + '\n')
+
 # Add after imports, before main()
 VALID_SOURCES = {
-    'facebook': 'facebook.group',
-    'navet': 'ifinavet.no',
-    'peoply': 'peoply.app',
+    'peoply': 'peoply.app',  # Fastest (API-based)
+    'navet': 'ifinavet.no',  # Medium (HTML scraping)
+    'facebook': 'facebook.group',  # Slowest (complex scraping with wait times)
     'all': None  # Special case handled in code
 }
+
+# Source mapping for database operations - using the same mapping as VALID_SOURCES
+SOURCE_MAPPING = {k: v for k, v in VALID_SOURCES.items() if k != 'all'}
 
 def get_scraper(source: str, cache_config: CacheConfig):
     """
@@ -181,12 +213,21 @@ def fetch_events(
         debug: Whether to show debug information
         facebook_config: Optional configuration for Facebook scraper
     """
+    # Add source separator if not quiet
+    if not quiet and source:
+        log_separator('source')
+        logger.info(f"Processing source: {source}")
+    
     # Set logging levels based on quiet mode
     if quiet:
         logging.getLogger('src.scrapers.peoply').setLevel(logging.WARNING)
         logging.getLogger('src.scrapers.navet').setLevel(logging.WARNING)
         logging.getLogger('src.db.database').setLevel(logging.WARNING)
         logger.setLevel(logging.WARNING)
+    
+    # Force live fetch if snapshot_id is provided
+    if snapshot_id:
+        use_cache = False
     
     # Configure cache based on parameters
     cache_config = CacheConfig(
@@ -232,7 +273,7 @@ def fetch_events(
                 if store_db:
                     for event in events:
                         # Check for duplicates before adding
-                        duplicate = check_duplicate_before_insert(event, db_path=str(Path(__file__).parent.parent / 'events.db'))
+                        duplicate = check_duplicate_before_insert(event)
                         if duplicate:
                             # Use the merged event instead
                             db.merge(duplicate)
@@ -253,6 +294,10 @@ def fetch_events(
                 # Print detailed information if requested
                 if detailed_output and not quiet:
                     print_events_info(events, detailed=True, source=source, debug=debug)
+                
+                # Add a newline after each source's summary
+                if not quiet:
+                    logger.info("")
             
             except Exception as e:
                 logger.error(f"Error processing events from {scraper.name()}: {e}")
@@ -302,6 +347,24 @@ def get_next_event() -> Optional[Event]:
     finally:
         close_db()
 
+def get_all_events(source: Optional[str] = None) -> List[Event]:
+    """Get all events from the database, optionally filtered by source"""
+    db = get_db()
+    try:
+        query = db.query(Event).order_by(Event.start_time.asc())
+        if source:
+            # Use consistent source mapping
+            db_source = SOURCE_MAPPING[source]
+            logger.info(f"[Source Debug] Filtering events by source: cli_source={source}, db_source={db_source}")
+            query = query.filter(Event.source_name == db_source)
+        events = query.all()
+        logger.info(f"[Source Debug] Found {len(events)} events")
+        for event in events:
+            logger.debug(f"[Source Debug] Retrieved event: source={event.source_name}, title={event.title}")
+        return events
+    finally:
+        close_db()
+
 def clear_database(quiet: bool = False, source: Optional[str] = None) -> None:
     """
     Clear events from the database.
@@ -316,14 +379,8 @@ def clear_database(quiet: bool = False, source: Optional[str] = None) -> None:
         # Build query
         query = db.query(Event)
         if source:
-            # Map command line source names to database source names
-            source_mapping = {
-                'facebook': 'facebook.group',
-                'navet': 'ifinavet.no',
-                'peoply': 'peoply.app'
-            }
-            db_source = source_mapping.get(source, source)
-            query = query.filter(Event.source_name == db_source)
+            logger.info(f"[Source Debug] Clearing events for source: {source}")
+            query = query.filter(Event.source_name == source)
         
         # Delete events
         count = query.delete()
@@ -331,25 +388,7 @@ def clear_database(quiet: bool = False, source: Optional[str] = None) -> None:
         
         if not quiet:
             source_str = f" from {source}" if source else ""
-            logger.info(f"Cleared {count} events{source_str} from database")
-    finally:
-        close_db()
-
-def get_all_events(source: Optional[str] = None) -> List[Event]:
-    """Get all events from the database, optionally filtered by source"""
-    db = get_db()
-    try:
-        query = db.query(Event).order_by(Event.start_time.asc())
-        if source:
-            # Map command line source names to database source names
-            source_mapping = {
-                'facebook': 'facebook.group',
-                'navet': 'ifinavet.no',
-                'peoply': 'peoply.app'
-            }
-            db_source = source_mapping.get(source, source)
-            query = query.filter(Event.source_name == db_source)
-        return query.all()
+            logger.info(f"[Source Debug] Cleared {count} events{source_str} from database")
     finally:
         close_db()
 
@@ -364,6 +403,9 @@ def main():
   
   # Fetch from all sources
   events.py fetch all
+  
+  # Fetch Facebook events from last 2 days
+  events.py fetch facebook --days 2
   
   # List events from a specific source
   events.py list navet
@@ -431,6 +473,8 @@ def main():
                            help='Event ID to show (use "r" for random event or "n" for next upcoming event)')
     
     dedup_parser = subparsers.add_parser('deduplicate', help='Deduplicate events in database')
+    dedup_parser.add_argument('source', choices=list(VALID_SOURCES.keys()),
+                           help='Source to deduplicate (use "all" for all sources)')
     dedup_parser.add_argument('--title-similarity', type=float, default=0.85,
                            help='Title similarity threshold (0-1, default: 0.85)')
     dedup_parser.add_argument('--time-window', type=int, default=120,
@@ -445,6 +489,10 @@ def main():
     if not args.command:
         parser.print_help()
         return
+    
+    # Add fetch operation separator for fetch commands
+    if args.command == 'fetch':
+        log_separator('fetch')
     
     # Handle source-independent commands first
     if args.command == 'show':
@@ -491,8 +539,6 @@ def main():
             logger.info(event.to_detailed_string())
             
     elif args.command == 'deduplicate':
-        from src.utils.deduplication import deduplicate_database, DuplicateConfig
-        
         # Create config from command line arguments
         config = DuplicateConfig(
             title_similarity_threshold=args.title_similarity,
@@ -502,18 +548,22 @@ def main():
         )
         
         # Run deduplication
-        db_path = str(Path(__file__).parent.parent / 'events.db')
-        logger.info("Starting database deduplication...")
+        logger.info("[Source Debug] Starting database deduplication...")
         logger.info(f"Using settings:")
         logger.info(f"  - Title similarity threshold: {config.title_similarity_threshold}")
         logger.info(f"  - Time window: {config.time_window_minutes} minutes")
         logger.info(f"  - Require location match: {config.require_same_location}")
         logger.info(f"  - Require exact time: {config.require_exact_time}")
         
-        duplicate_count, merged_events = deduplicate_database(db_path, config)
+        # Get the database source name
+        source_name = SOURCE_MAPPING[args.source] if args.source != 'all' else None
+        logger.info(f"[Source Debug] Deduplicating with source: cli_source={args.source}, db_source={source_name}")
+
+        # Run deduplication with source filtering
+        duplicate_count, merged_events = deduplicate_database(config, source_name=source_name)
         
-        logger.info(f"Found and merged {duplicate_count} duplicate events")
-        logger.info(f"Database now contains {len(merged_events)} unique events")
+        logger.info(f"[Source Debug] Found and merged {duplicate_count} duplicate events")
+        logger.info(f"[Source Debug] Database now contains {len(merged_events)} unique events")
         
     # Handle source-dependent commands
     else:
@@ -548,19 +598,37 @@ def main():
         elif args.command == 'list':
             init_db()
             for source in sources:
-                db_source = VALID_SOURCES[source]
-                events = get_all_events(source=db_source)
+                # Use consistent source mapping
+                db_source = SOURCE_MAPPING[source]
+                logger.info(f"[Source Debug] Listing events for source: cli_source={source}, db_source={db_source}")
+                events = get_all_events(source=source)
                 if not events:
                     logger.error(f"No events found from {source}")
                     continue
                 
-                logger.info(f"Found {len(events)} events from {source}:")
+                logger.info(f"Found {len(events)} events from {db_source}:")
                 print_events_info(events, detailed=args.detailed)
                 
         elif args.command == 'clear':
             for source in sources:
-                db_source = VALID_SOURCES[source]
-                clear_database(quiet=args.quiet, source=db_source)
+                clear_database(quiet=args.quiet, source=VALID_SOURCES[source])
+
+        elif args.command == 'deduplicate':
+            # Create config from command line arguments
+            config = DuplicateConfig(
+                title_similarity_threshold=args.title_similarity,
+                time_window_minutes=args.time_window,
+                require_same_location=args.require_location,
+                require_exact_time=args.require_exact_time
+            )
+
+            for source in sources:
+                # Run deduplication
+                logger.info(f"Starting deduplication for {source}...")
+                source_name = VALID_SOURCES[source]
+                duplicate_count, merged_events = deduplicate_database(config, source_name=source_name)
+                logger.info(f"Found and merged {duplicate_count} duplicate events for {source}")
+                logger.info(f"Database now contains {len(merged_events)} unique events for {source}")
 
 if __name__ == "__main__":
     main() 

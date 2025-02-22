@@ -1,10 +1,9 @@
 from datetime import datetime, timedelta
-import sqlite3
 import logging
 from typing import Optional, List, Tuple, Any, Dict, Callable
 from difflib import SequenceMatcher
-from sqlalchemy import inspect, DateTime
 from ..models.event import Event
+from ..db import get_db, close_db, init_db
 
 logger = logging.getLogger(__name__)
 
@@ -27,36 +26,6 @@ class DuplicateConfig:
         self.ignore_case = ignore_case
         self.normalize_whitespace = normalize_whitespace
         self.require_same_source = require_same_source
-
-# Special merge strategies for specific fields
-EVENT_MERGE_STRATEGIES: Dict[str, Callable[[Event, Event], Any]] = {
-    'id': lambda e1, e2: (e1.id if (e1.created_at and e2.created_at and e1.created_at < e2.created_at) 
-                         else (e2.id if e2.created_at else e1.id)),
-    'description': lambda e1, e2: (
-        f"{e1.description}\n\nAlternative description:\n{e2.description}"
-        if (e2.description and e2.description != e1.description)
-        else e1.description
-    ),
-    'start_time': lambda e1, e2: min(e1.start_time, e2.start_time),
-    'end_time': lambda e1, e2: max(e1.end_time, e2.end_time) if (e1.end_time and e2.end_time) else (e1.end_time or e2.end_time),
-    'created_at': lambda e1, e2: min(e1.created_at, e2.created_at) if (e1.created_at and e2.created_at) else (e1.created_at or e2.created_at),
-    'registration_opens': lambda e1, e2: min(e1.registration_opens, e2.registration_opens) if (e1.registration_opens and e2.registration_opens) else (e1.registration_opens or e2.registration_opens),
-    'source_name': lambda e1, e2: (
-        ', '.join([e1.source_name, e2.source_name]) 
-        if (e1.source_name and e2.source_name and e1.source_name != e2.source_name)
-        else (e1.source_name or e2.source_name)
-    ),
-    'attachments': lambda e1, e2: (
-        list(set(e1.attachments or []) | set(e2.attachments or []))  # Combine unique attachments from both events
-        if (e1.attachments or e2.attachments)
-        else []
-    ),
-    'author': lambda e1, e2: (
-        f"{e1.author}, {e2.author}"
-        if (e1.author and e2.author and e1.author != e2.author)
-        else (e1.author or e2.author)
-    )
-}
 
 def normalize_string(text: str, config: DuplicateConfig) -> str:
     """Normalize string based on config"""
@@ -111,6 +80,36 @@ def are_events_duplicate(event1: Event, event2: Event, config: DuplicateConfig =
     
     return True
 
+# Special merge strategies for specific fields
+EVENT_MERGE_STRATEGIES: Dict[str, Callable[[Event, Event], Any]] = {
+    'id': lambda e1, e2: e1.id or e2.id,  # Always keep an existing ID, never None
+    'description': lambda e1, e2: (
+        f"{e1.description}\n\nAlternative description:\n{e2.description}"
+        if (e2.description and e2.description != e1.description)
+        else e1.description
+    ),
+    'start_time': lambda e1, e2: min(e1.start_time, e2.start_time),
+    'end_time': lambda e1, e2: max(e1.end_time, e2.end_time) if (e1.end_time and e2.end_time) else (e1.end_time or e2.end_time),
+    'created_at': lambda e1, e2: min(e1.created_at, e2.created_at) if (e1.created_at and e2.created_at) else (e1.created_at or e2.created_at),
+    'registration_opens': lambda e1, e2: min(e1.registration_opens, e2.registration_opens) if (e1.registration_opens and e2.registration_opens) else (e1.registration_opens or e2.registration_opens),
+    'source_name': lambda e1, e2: (
+        # If both events have the same source, keep it
+        e1.source_name if e1.source_name == e2.source_name
+        # If only one has a source, use that one
+        else (e1.source_name or e2.source_name)
+        # If they have different sources, join them (this should rarely happen due to require_same_source)
+    ),
+    'attachment': lambda e1, e2: (
+        # Keep the attachment from the newer event if it has one, otherwise keep the older one
+        e2.attachment if e2.attachment else e1.attachment
+    ),
+    'author': lambda e1, e2: (
+        f"{e1.author}, {e2.author}"
+        if (e1.author and e2.author and e1.author != e2.author)
+        else (e1.author or e2.author)
+    )
+}
+
 def merge_events(event1: Event, event2: Event) -> Event:
     """
     Merge two events that are considered duplicates.
@@ -132,6 +131,11 @@ def merge_events(event1: Event, event2: Event) -> Event:
     base_event = event2 if event2_time > event1_time else event1
     other_event = event1 if event2_time > event1_time else event2
     
+    # Preserve source_name if both events are from the same source
+    source_name = None
+    if base_event.source_name == other_event.source_name:
+        source_name = base_event.source_name
+    
     # Apply special merge strategies
     for field, strategy in EVENT_MERGE_STRATEGIES.items():
         try:
@@ -140,42 +144,11 @@ def merge_events(event1: Event, event2: Event) -> Event:
         except Exception as e:
             logger.warning(f"Failed to apply merge strategy for {field}: {e}")
     
+    # Ensure source_name is preserved if both events were from the same source
+    if source_name:
+        base_event.source_name = source_name
+    
     return base_event
-
-def _get_event_columns() -> List[str]:
-    """Get all column names from the Event model"""
-    return [c.key for c in inspect(Event).mapper.column_attrs]
-
-def _get_datetime_columns() -> List[str]:
-    """Get names of all datetime columns from the Event model"""
-    return [c.key for c in inspect(Event).mapper.column_attrs 
-            if isinstance(c.columns[0].type, DateTime)]
-
-def _build_select_query(columns: List[str], where_clause: str = "") -> str:
-    """Build a SELECT query for events"""
-    return f"""
-        SELECT {', '.join(columns)}
-        FROM events
-        {where_clause}
-    """
-
-def _row_to_event(row: Tuple[Any, ...], columns: List[str]) -> Optional[Event]:
-    """Convert a database row to an Event object"""
-    try:
-        # Create dict of column names to values
-        values = {}
-        datetime_columns = _get_datetime_columns()
-        
-        for i, column in enumerate(columns):
-            value = row[i]
-            # Handle datetime fields
-            if value and column in datetime_columns:
-                value = datetime.fromisoformat(value)
-            values[column] = value
-        return Event(**values)
-    except Exception as e:
-        logger.warning(f"Failed to parse event {row[0] if row else 'unknown'}: {e}")
-        return None
 
 def _find_and_merge_duplicates(events: List[Event], config: DuplicateConfig) -> Tuple[List[Event], int]:
     """
@@ -206,82 +179,81 @@ def _find_and_merge_duplicates(events: List[Event], config: DuplicateConfig) -> 
     
     return merged_events, duplicate_count
 
-def deduplicate_database(db_path: str, config: DuplicateConfig = DuplicateConfig()) -> Tuple[int, List[Event]]:
+def deduplicate_database(config: DuplicateConfig = DuplicateConfig(), source_name: Optional[str] = None) -> Tuple[int, List[Event]]:
     """
-    Deduplicate events in the database.
+    Deduplicate events in the database, optionally filtering by source.
     Returns tuple of (number of duplicates found, list of merged events)
     """
-    with sqlite3.connect(db_path) as conn:
-        c = conn.cursor()
-        
-        # Get all columns and build query
-        columns = _get_event_columns()
-        query = _build_select_query(columns, "ORDER BY created_at ASC")
-        
-        # Get all events
-        c.execute(query)
-        
-        # Convert to Event objects
-        events = []
-        for row in c.fetchall():
-            event = _row_to_event(row, columns)
-            if event:
-                events.append(event)
+    init_db()  # Ensure database is initialized
+    db = get_db()
+    try:
+        # Get all events, optionally filtered by source
+        query = db.query(Event)
+        if source_name:
+            logger.info(f"Deduplicating events with source_name={source_name}")
+            query = query.filter(Event.source_name == source_name)
+        events = query.order_by(Event.created_at.asc()).all()
+        logger.info(f"Found {len(events)} events to process")
         
         # Find and merge duplicates
         merged_events, duplicate_count = _find_and_merge_duplicates(events, config)
+        logger.info(f"After merging: {len(merged_events)} events")
         
-        # Update database with merged events
-        c.execute('DELETE FROM events')
+        # If we're deduplicating a specific source, ensure all merged events keep that source
+        if source_name:
+            for event in merged_events:
+                event.source_name = source_name
         
-        # Build insert query using same columns
-        placeholders = ', '.join(['?' for _ in columns])
-        insert_query = f"""
-            INSERT INTO events ({', '.join(columns)})
-            VALUES ({placeholders})
-        """
+        # Delete all events (filtered by source if specified)
+        delete_query = db.query(Event)
+        if source_name:
+            delete_query = delete_query.filter(Event.source_name == source_name)
+        deleted_count = delete_query.delete(synchronize_session=False)
+        logger.info(f"Deleted {deleted_count} events")
         
-        # Insert merged events
+        # Clear session to remove any stale references
+        db.expunge_all()
+        
+        # Add merged events back to database as new instances
         for event in merged_events:
-            values = []
-            for column in columns:
-                value = getattr(event, column)
-                # Convert datetime to string
-                if isinstance(value, datetime):
-                    value = value.isoformat()
-                values.append(value)
-            c.execute(insert_query, values)
+            # Create a new Event instance with the same data, excluding SQLAlchemy's internal attributes
+            # Note: We now keep the id if it exists
+            event_data = {k: v for k, v in event.__dict__.items() 
+                        if not k.startswith('_')}
+            new_event = Event(**event_data)
+            db.add(new_event)
         
-        conn.commit()
+        # Commit all changes
+        db.commit()
         
         return duplicate_count, merged_events
+        
+    finally:
+        close_db()
 
-def check_duplicate_before_insert(new_event: Event, db_path: str, config: DuplicateConfig = DuplicateConfig()) -> Optional[Event]:
+def check_duplicate_before_insert(new_event: Event, config: DuplicateConfig = DuplicateConfig()) -> Optional[Event]:
     """
     Check if an event already exists in the database before inserting.
     Returns merged event if duplicate found, None otherwise.
     """
-    with sqlite3.connect(db_path) as conn:
-        c = conn.cursor()
-        
+    db = get_db()
+    try:
         # Get potential duplicates within time window
         time_window = timedelta(minutes=config.time_window_minutes)
-        start_time_min = (new_event.start_time - time_window).isoformat()
-        start_time_max = (new_event.start_time + time_window).isoformat()
+        start_time_min = new_event.start_time - time_window
+        start_time_max = new_event.start_time + time_window
         
-        # Get all columns and build query
-        columns = _get_event_columns()
-        query = _build_select_query(
-            columns,
-            "WHERE start_time BETWEEN ? AND ?"
-        )
-        
-        c.execute(query, (start_time_min, start_time_max))
+        # Query potential duplicates
+        potential_duplicates = db.query(Event).filter(
+            Event.start_time.between(start_time_min, start_time_max)
+        ).all()
         
         # Check each potential duplicate
-        for row in c.fetchall():
-            existing_event = _row_to_event(row, columns)
-            if existing_event and are_events_duplicate(new_event, existing_event, config):
+        for existing_event in potential_duplicates:
+            if are_events_duplicate(new_event, existing_event, config):
                 return merge_events(existing_event, new_event)
-    
-    return None 
+        
+        return None
+        
+    finally:
+        close_db() 

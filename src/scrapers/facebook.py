@@ -1,6 +1,6 @@
 """Scraper for Facebook group posts using BrightData's API."""
 
-from datetime import datetime
+from datetime import datetime, timedelta
 import logging
 import time
 from typing import List, Optional, Dict, Any
@@ -13,6 +13,8 @@ from ..utils.decorators import cached_request
 from ..utils.timezone import now_oslo, ensure_oslo_timezone
 from ..config.sources import SOURCES
 from ..utils.llm import init_openai, is_event_post, parse_event_details
+from ..db import get_db
+from sqlalchemy import func
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +43,7 @@ class FacebookGroupScraper(BaseScraper):
             "include_errors": "true",
         }
         self.group_url = brightdata_config['group_url']
-        self.num_posts = brightdata_config['num_posts']
+        self.days_to_fetch = brightdata_config.get('days_to_fetch', 1)  # Default to 1 if not specified
         
         self.cache_config = cache_config or CacheConfig()
         self.cache_manager = CacheManager(self.cache_config.cache_dir)
@@ -57,18 +59,65 @@ class FacebookGroupScraper(BaseScraper):
         """Return the name of the scraper."""
         return SOURCES['facebook'].name
     
+    def _extract_post_id(self, url: str) -> Optional[str]:
+        """Extract the post ID from a Facebook post URL."""
+        if not url:
+            return None
+        try:
+            return url.split('/posts/')[-1].strip('/')
+        except Exception:
+            logger.warning(f"Could not extract post ID from URL: {url}")
+            return None
+
+    def _get_event_urls_for_timeframe(self, num_days: int = 1) -> List[str]:
+        """
+        Get source URLs of events from the last N days.
+        
+        Args:
+            num_days: Number of days to look back (default: 1 for today only)
+        """
+        db = get_db()
+        try:
+            # Get date range in Oslo timezone
+            end_date = now_oslo().date()
+            start_date = end_date - timedelta(days=num_days - 1)
+            
+            # Query for events in date range
+            events = db.query(Event).filter(
+                Event.source_name == self.name(),
+                Event.created_at >= start_date
+            ).all()
+            
+            return [event.source_url for event in events if event.source_url]
+        finally:
+            db.close()
+
     def _trigger_scrape(self) -> Optional[str]:
         """
         Trigger a new scrape of the Facebook group.
-        Returns the snapshot_id if successful, None otherwise.
+        
+        Returns:
+            snapshot_id if successful, None otherwise.
         """
         try:
+            # Get date range in Oslo timezone
+            end_date = now_oslo()
+            start_date = end_date - timedelta(days=self.days_to_fetch - 1)
+            
+            # Format dates for API in MM-DD-YYYY format
+            start_date_str = start_date.strftime("%m-%d-%Y")
+            end_date_str = end_date.strftime("%m-%d-%Y")
+            
+            # Get URLs from the specified timeframe and extract post IDs
+            urls = self._get_event_urls_for_timeframe(num_days=self.days_to_fetch)
+            posts_to_exclude = [self._extract_post_id(url) for url in urls if url and self._extract_post_id(url)]
+            
             data = [
                 {
                     "url": self.group_url,
-                    "num_of_posts": self.num_posts,
-                    "start_date": "",
-                    "end_date": ""
+                    "start_date": start_date_str,
+                    "end_date": end_date_str,
+                    "posts_to_not_include": posts_to_exclude
                 }
             ]
             
@@ -138,27 +187,6 @@ class FacebookGroupScraper(BaseScraper):
             logger.error(f"Error checking status for snapshot {snapshot_id}: {e}")
             return False
     
-    def _get_results(self, snapshot_id: str) -> Optional[List[Dict[str, Any]]]:
-        """
-        Retrieve the results of a completed scrape.
-        Returns the list of posts if successful, None otherwise.
-        """
-        try:
-            response = requests.get(
-                f"{self.base_url}/snapshot/{snapshot_id}",
-                headers=self.headers,
-                params={"format": "json"}
-            )
-            response.raise_for_status()
-            results = response.json()
-            
-            logger.info(f"Successfully retrieved results for snapshot {snapshot_id}")
-            return results
-            
-        except Exception as e:
-            logger.error(f"Error retrieving results for snapshot {snapshot_id}: {e}")
-            return None
-    
     def _fetch_posts_from_snapshot(self, snapshot_id: str) -> str:
         """
         Fetch posts directly from an existing snapshot ID.
@@ -170,6 +198,19 @@ class FacebookGroupScraper(BaseScraper):
                 headers=self.headers,
                 params={"format": "json"}
             )
+            
+            # Debug logging for request
+            logger.info(f"Fetching snapshot with:")
+            logger.info(f"URL: {self.base_url}/snapshot/{snapshot_id}")
+            logger.info(f"Headers: {self.headers}")
+            logger.info(f"Params: {{'format': 'json'}}")
+            
+            # Handle empty snapshots (returns 400 with "Snapshot is empty" message)
+            if response.status_code == 400 and response.text.strip() == "Snapshot is empty":
+                logger.info(f"Snapshot {snapshot_id} is empty, returning empty list")
+                return json.dumps([])
+            
+            # For all other responses, check status code
             response.raise_for_status()
             results = response.json()
             
@@ -259,33 +300,30 @@ class FacebookGroupScraper(BaseScraper):
                     end_time = None
             
             # Get attachments (combine all relevant sources)
-            attachments = []
+            attachment = None
+            
+            # First try to get an image URL from attachments
             if post.get('attachments'):
-                # Extract URLs from attachment dictionaries
-                for attachment in post['attachments']:
-                    if isinstance(attachment, dict):
-                        # Get the main attachment URL
-                        if 'url' in attachment:
-                            attachments.append(attachment['url'])
-                        # Get the event/external URL if available
-                        if 'attachment_url' in attachment:
-                            attachments.append(attachment['attachment_url'])
-                    elif isinstance(attachment, str):
-                        attachments.append(attachment)
+                for att in post['attachments']:
+                    if isinstance(att, dict):
+                        # Prefer actual image URLs over Facebook event links
+                        if 'url' in att and 'attachment_url' not in att:  # Skip if it's a Facebook event
+                            attachment = att['url']
+                            break
+                        elif isinstance(att, str):
+                            attachment = att
+                            break
             
-            # Add post external image if available
-            if post.get('post_external_image'):
+            # If no image found in attachments, try post_external_image
+            if not attachment and post.get('post_external_image'):
                 if isinstance(post['post_external_image'], dict) and 'url' in post['post_external_image']:
-                    attachments.append(post['post_external_image']['url'])
+                    attachment = post['post_external_image']['url']
                 elif isinstance(post['post_external_image'], str):
-                    attachments.append(post['post_external_image'])
+                    attachment = post['post_external_image']
             
-            # Add external link if available and not already in attachments
-            if post.get('post_external_link') and post['post_external_link'] not in attachments:
-                attachments.append(post['post_external_link'])
-            
-            # Remove duplicates while preserving order
-            attachments = list(dict.fromkeys(attachments))
+            # Finally, try post_external_link if no images found
+            if not attachment and post.get('post_external_link'):
+                attachment = post['post_external_link']
             
             # Convert post date to datetime with timezone
             created_at = None
@@ -304,7 +342,7 @@ class FacebookGroupScraper(BaseScraper):
                 source_url=post.get('url', ''),
                 source_name=self.name(),
                 author=post.get('user_username_raw'),  # Direct mapping from post author
-                attachments=attachments,  # Combined attachments list
+                attachment=attachment,  # Primary attachment URL
                 created_at=created_at  # Post creation date
             )
             
@@ -323,7 +361,12 @@ class FacebookGroupScraper(BaseScraper):
             return None
     
     def get_events(self, snapshot_id: str = None) -> List[Event]:
-        """Get events from Facebook group posts."""
+        """
+        Get events from Facebook group posts.
+        
+        Args:
+            snapshot_id: Optional snapshot ID to fetch from directly
+        """
         try:
             # Fetch posts (using cache if available)
             posts_json = self._fetch_posts(
@@ -332,13 +375,63 @@ class FacebookGroupScraper(BaseScraper):
             )
             posts = json.loads(posts_json)
             
+            # Filter out "no results" records (they have url=null and usually a warning message)
+            valid_posts = [post for post in posts if post.get('url') is not None]
+            if len(valid_posts) < len(posts):
+                logger.info(f"Filtered out {len(posts) - len(valid_posts)} 'no results' records")
+                if not valid_posts:
+                    logger.info("No valid posts found in response")
+                    return []
+            
+            # Find the date range of the fetched posts
+            post_dates = []
+            for post in valid_posts:
+                try:
+                    if post.get('date_posted'):
+                        post_date = ensure_oslo_timezone(datetime.fromisoformat(post['date_posted'])).date()
+                        post_dates.append(post_date)
+                except (ValueError, TypeError):
+                    logger.warning(f"Failed to parse date_posted: {post.get('date_posted')}")
+                    continue
+            
+            if not post_dates:
+                logger.warning("No valid dates found in posts")
+                return []
+            
+            # Get the date range
+            start_date = min(post_dates)
+            end_date = max(post_dates)
+            logger.info(f"Posts span from {start_date} to {end_date}")
+            
+            # Get URLs of events we already have in the database for this date range
+            db = get_db()
+            try:
+                # Use date() function on created_at for proper date comparison
+                events = db.query(Event).filter(
+                    Event.source_name == self.name(),
+                    Event.created_at.isnot(None),  # Ensure we have a date
+                    func.date(Event.created_at) >= start_date,
+                    func.date(Event.created_at) <= end_date
+                ).all()
+                known_urls = {event.source_url for event in events if event.source_url}
+            finally:
+                db.close()
+            
+            # Filter out posts we already have in our database
+            new_posts = [post for post in valid_posts if post.get('url') not in known_urls]
+            if len(new_posts) < len(valid_posts):
+                logger.info(f"Filtered out {len(valid_posts) - len(new_posts)} already known posts")
+                if not new_posts:
+                    logger.info("No new posts to process")
+                    return []
+            
             # Get the fetch timestamp
             meta = self.cache_manager.get_metadata(self.name(), 'latest_posts')
             fetch_time = datetime.fromisoformat(meta['cached_at']) if meta else now_oslo()
             
-            # Parse posts into events
+            # Parse posts into events (only new ones)
             events = []
-            for post in posts:
+            for post in new_posts:
                 try:
                     event = self._parse_post_to_event(post)
                     if event:
@@ -349,7 +442,7 @@ class FacebookGroupScraper(BaseScraper):
                     logger.error(f"Error parsing post: {e}")
                     continue
             
-            logger.info(f"Found {len(events)} events in {len(posts)} posts")
+            logger.info(f"Found {len(events)} new events in {len(new_posts)} new posts")
             return events
             
         except Exception as e:
