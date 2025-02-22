@@ -55,6 +55,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 from sqlalchemy import text
 import json
+from logging.handlers import RotatingFileHandler
 
 # Add src directory to Python path
 sys.path.append(str(Path(__file__).parent.parent))
@@ -68,9 +69,26 @@ from src.models.event import Event
 from src.utils.timezone import now_oslo
 from src.utils.deduplication import check_duplicate_before_insert, deduplicate_database, DuplicateConfig
 
+# Create logs directory if it doesn't exist
+log_dir = Path(__file__).parent.parent / 'logs'
+log_dir.mkdir(exist_ok=True)
+log_file = log_dir / 'events.log'
+
+# Configure logging to both file and console
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.INFO
+    level=logging.INFO,
+    handlers=[
+        # Console handler
+        logging.StreamHandler(),
+        # File handler with rotation (keep 30 days of logs, max 10MB per file)
+        RotatingFileHandler(
+            log_file,
+            maxBytes=10*1024*1024,  # 10MB
+            backupCount=30,
+            encoding='utf-8'
+        )
+    ]
 )
 logger = logging.getLogger(__name__)
 
@@ -78,11 +96,22 @@ logger = logging.getLogger(__name__)
 for module in ['src.scrapers.peoply', 'src.scrapers.navet', 'src.db.database']:
     logging.getLogger(module).setLevel(logging.INFO)
 
+def log_separator(level='source'):
+    """Add a visual separator to the logs"""
+    if level == 'source':
+        # Shorter separator between sources with newlines
+        logger.info('\n' + '-' * 50)
+    elif level == 'fetch':
+        # Longer separator between fetch operations with more newlines
+        logger.info('\n\n' + '=' * 100)
+        logger.info(f"Starting new fetch operation at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        logger.info('=' * 100 + '\n')
+
 # Add after imports, before main()
 VALID_SOURCES = {
-    'facebook': 'facebook.group',
-    'navet': 'ifinavet.no',
-    'peoply': 'peoply.app',
+    'peoply': 'peoply.app',  # Fastest (API-based)
+    'navet': 'ifinavet.no',  # Medium (HTML scraping)
+    'facebook': 'facebook.group',  # Slowest (complex scraping with wait times)
     'all': None  # Special case handled in code
 }
 
@@ -184,6 +213,11 @@ def fetch_events(
         debug: Whether to show debug information
         facebook_config: Optional configuration for Facebook scraper
     """
+    # Add source separator if not quiet
+    if not quiet and source:
+        log_separator('source')
+        logger.info(f"Processing source: {source}")
+    
     # Set logging levels based on quiet mode
     if quiet:
         logging.getLogger('src.scrapers.peoply').setLevel(logging.WARNING)
@@ -260,6 +294,10 @@ def fetch_events(
                 # Print detailed information if requested
                 if detailed_output and not quiet:
                     print_events_info(events, detailed=True, source=source, debug=debug)
+                
+                # Add a newline after each source's summary
+                if not quiet:
+                    logger.info("")
             
             except Exception as e:
                 logger.error(f"Error processing events from {scraper.name()}: {e}")
@@ -451,6 +489,10 @@ def main():
     if not args.command:
         parser.print_help()
         return
+    
+    # Add fetch operation separator for fetch commands
+    if args.command == 'fetch':
+        log_separator('fetch')
     
     # Handle source-independent commands first
     if args.command == 'show':
