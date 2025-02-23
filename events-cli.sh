@@ -6,7 +6,17 @@ BASE_URL="https://ifi.events"
 
 # Load environment variables from .env if it exists
 if [ -f .env ]; then
-    export $(cat .env | grep -v '^#' | xargs)
+    while IFS= read -r line || [ -n "$line" ]; do
+        # Skip comments and empty lines
+        if [[ $line =~ ^[[:space:]]*$ ]] || [[ $line =~ ^[[:space:]]*# ]]; then
+            continue
+        fi
+        # Remove inline comments and trailing whitespace
+        line=$(echo "$line" | sed 's/[[:space:]]*#.*$//' | sed 's/[[:space:]]*$//')
+        if [ -n "$line" ]; then
+            export "$line"
+        fi
+    done < .env
 fi
 
 # Check for API key in environment
