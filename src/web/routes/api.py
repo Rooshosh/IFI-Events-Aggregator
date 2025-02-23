@@ -6,6 +6,7 @@ from pathlib import Path
 import logging
 from typing import Optional, Dict, Any
 import io
+from functools import wraps
 from contextlib import contextmanager
 
 # Configure logging
@@ -16,6 +17,25 @@ api_bp = Blueprint('api', __name__, url_prefix='/api')
 
 # Path to the events.py script
 EVENTS_SCRIPT = Path(__file__).parent.parent.parent.parent / 'scripts' / 'events.py'
+
+def require_api_key(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        api_key = request.headers.get('X-API-Key')
+        expected_key = os.environ.get('API_KEY')
+        
+        if not expected_key:
+            logger.error("API_KEY environment variable not set")
+            return jsonify({'error': 'Server configuration error'}), 500
+            
+        if not api_key:
+            return jsonify({'error': 'API key missing'}), 401
+            
+        if api_key != expected_key:
+            return jsonify({'error': 'Invalid API key'}), 401
+            
+        return f(*args, **kwargs)
+    return decorated_function
 
 @contextmanager
 def capture_logs():
@@ -104,6 +124,7 @@ def run_events_command(command: str, *args, **kwargs) -> Dict[str, Any]:
         }
 
 @api_bp.route('/events/fetch', methods=['POST'])
+@require_api_key
 def fetch_events():
     """
     Fetch events from specified source(s).
@@ -134,6 +155,7 @@ def fetch_events():
     return jsonify(result)
 
 @api_bp.route('/events/list', methods=['GET'])
+@require_api_key
 def list_events():
     """
     List events from the database.
@@ -154,6 +176,7 @@ def list_events():
     return jsonify(result)
 
 @api_bp.route('/events/clear', methods=['POST'])
+@require_api_key
 def clear_events():
     """
     Clear events from the database.
@@ -174,6 +197,7 @@ def clear_events():
     return jsonify(result)
 
 @api_bp.route('/events/show/<event_id>', methods=['GET'])
+@require_api_key
 def show_event(event_id):
     """
     Show a specific event.
@@ -185,6 +209,7 @@ def show_event(event_id):
     return jsonify(result)
 
 @api_bp.route('/events/deduplicate', methods=['POST'])
+@require_api_key
 def deduplicate_events():
     """
     Deduplicate events in the database.
