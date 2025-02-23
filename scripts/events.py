@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
 
 """
-IFI Events Management Tool
+This script provides a command-line interface for managing events in the IFI Events.
 
-This script provides a command-line interface for managing events in the IFI Events Aggregator.
-It handles:
+This script handles:
 - Fetching events from different sources (Navet, Peoply, Facebook)
 - Caching of raw API/web responses (to minimize calls to sources)
 - Parsing events into our format

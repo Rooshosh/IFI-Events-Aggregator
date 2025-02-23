@@ -1,4 +1,4 @@
-# IFI Events Aggregator
+# IFI Events
 
 A Python application that aggregates and displays events from various UiO IFI (Department of Informatics) sources.
 
