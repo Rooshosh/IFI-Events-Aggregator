@@ -1,6 +1,6 @@
 from flask import Flask, render_template
 from ..db import db_manager
-from .routes import events_bp
+from .routes import events_bp, api_bp
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -11,6 +11,7 @@ db_manager.init_db()  # Create tables if they don't exist
 
 # Register blueprints
 app.register_blueprint(events_bp)
+app.register_blueprint(api_bp)
 
 # Error handlers
 @app.errorhandler(404)
