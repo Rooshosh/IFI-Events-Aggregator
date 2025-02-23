@@ -3,6 +3,10 @@ from ..db import db_manager
 from .routes import events_bp, api_bp
 from dotenv import load_dotenv
 import os
+import logging
+
+# Module logger
+logger = logging.getLogger(__name__)
 
 # Load environment variables from .env file
 load_dotenv()

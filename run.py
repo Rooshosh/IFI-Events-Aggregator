@@ -25,5 +25,5 @@ if __name__ == '__main__':
     # Set debug mode based on environment variable
     debug_mode = os.environ.get('FLASK_ENV') == 'development'
     
-    # Run the app
-    app.run(debug=debug_mode) 
+    # Run the app on port 5001
+    app.run(debug=debug_mode, port=5001) 
