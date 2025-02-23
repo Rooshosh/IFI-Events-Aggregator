@@ -56,6 +56,7 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import text
 import json
 from logging.handlers import RotatingFileHandler
+import os
 
 # Add src directory to Python path
 sys.path.append(str(Path(__file__).parent.parent))
@@ -75,10 +76,14 @@ log_dir.mkdir(exist_ok=True)
 log_file = log_dir / 'events.log'
 
 # Configure logging to both file and console
-logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.INFO,
-    handlers=[
+handlers = []
+
+# Always add console handler when LOG_TO_STDOUT is set
+if os.environ.get('LOG_TO_STDOUT'):
+    handlers.append(logging.StreamHandler(sys.stdout))
+else:
+    # In normal operation, use both file and console handlers
+    handlers.extend([
         # Console handler
         logging.StreamHandler(),
         # File handler with rotation (keep 30 days of logs, max 10MB per file)
@@ -88,7 +93,12 @@ logging.basicConfig(
             backupCount=30,
             encoding='utf-8'
         )
-    ]
+    ])
+
+logging.basicConfig(
+    format='%(message)s' if os.environ.get('LOG_TO_STDOUT') else '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=logging.INFO,
+    handlers=handlers
 )
 logger = logging.getLogger(__name__)
 

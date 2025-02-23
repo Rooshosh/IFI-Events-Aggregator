@@ -21,3 +21,6 @@ replit.nix
 .config/
 .upm/
 .cache/
+
+# Downloaded logs directory
+downloaded_logs/
