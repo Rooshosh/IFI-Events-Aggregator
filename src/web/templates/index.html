@@ -644,6 +644,9 @@
         // Set current view
         currentView = view;
 
+        // Save view preference
+        localStorage.setItem('preferredView', view);
+
         // If switching to calendar view, make sure to re-render it
         if (view === 'calendar' && window.calendar) {
             window.calendar.render();
@@ -669,11 +672,6 @@
         window.currentEvents = source === 'all' 
             ? [...window.allEventsBackup]
             : window.allEventsBackup.filter(event => event.source_name === source);
-
-        // Update URL without reloading
-        const url = new URL(window.location);
-        url.searchParams.set('source', source);
-        window.history.pushState({}, '', url);
 
         // Re-render the current view with filtered events
         renderCurrentView();
@@ -703,19 +701,18 @@
                     }
                 }))
             });
-            window.calendar.render();
         }
         
-        // Get source from URL parameter and apply filter
-        const urlParams = new URLSearchParams(window.location.search);
-        const source = urlParams.get('source') || 'all';
-        filterSource(source);
+        // Always start with 'all' sources
+        filterSource('all');
         
         // Set up tab event listeners using Bootstrap's API
         document.querySelectorAll('button[data-bs-toggle="tab"]').forEach(tabEl => {
             tabEl.addEventListener('shown.bs.tab', event => {
                 const view = event.target.getAttribute('data-bs-target').replace('#', '').replace('-view', '');
                 currentView = view;
+                // Save view preference when tab is changed
+                localStorage.setItem('preferredView', view);
                 renderCurrentView();
                 
                 if (view === 'calendar' && window.calendar) {
@@ -723,6 +720,20 @@
                 }
             });
         });
+
+        // Restore preferred view if saved
+        const savedView = localStorage.getItem('preferredView') || 'list';
+        // Use Bootstrap's Tab API to show the saved view
+        const tabEl = document.getElementById(`${savedView}-tab`);
+        if (tabEl) {
+            const tab = new bootstrap.Tab(tabEl);
+            tab.show();
+            currentView = savedView;
+            renderCurrentView();
+            if (savedView === 'calendar' && window.calendar) {
+                window.calendar.render();
+            }
+        }
     };
 </script>
 
