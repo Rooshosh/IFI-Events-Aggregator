@@ -44,12 +44,14 @@ show_usage() {
     echo "  clear [source]                          Clear events from database"
     echo "  show <id|r|n>                          Show specific event (id, random, or next)"
     echo "  deduplicate [source]                    Deduplicate events in database"
+    echo "  logs                                    Download the events log file"
     echo ""
     echo "Examples:"
     echo "  $0 local fetch peoply --live            Fetch Peoply events locally"
     echo "  $0 prod list navet --detailed           List Navet events in production"
     echo "  $0 local clear all                      Clear all events locally"
     echo "  $0 prod show n                          Show next event in production"
+    echo "  $0 local logs                           Download events log file"
     echo ""
     echo "Note: Make sure to set the API_KEY environment variable or have it in your .env file"
     exit 1
@@ -128,6 +130,22 @@ case $COMMAND in
         curl -X POST "$BASE_URL/api/events/deduplicate" \
             "${HEADERS[@]}" \
             -d "{\"source\": \"$SOURCE\"}"
+        ;;
+        
+    "logs")
+        # Create downloaded_logs directory if it doesn't exist
+        mkdir -p downloaded_logs
+        
+        # Generate timestamp for the filename
+        TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
+        OUTPUT_FILE="downloaded_logs/events_${TIMESTAMP}.log"
+        
+        # Download the events log file
+        curl "$BASE_URL/api/logs/events" \
+            "${HEADERS[@]}" \
+            --output "$OUTPUT_FILE"
+            
+        echo "Log file downloaded as $OUTPUT_FILE"
         ;;
         
     *)

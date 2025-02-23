@@ -1,4 +1,4 @@
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, request, send_file
 import subprocess
 import sys
 import os
@@ -17,6 +17,7 @@ api_bp = Blueprint('api', __name__, url_prefix='/api')
 
 # Path to the events.py script
 EVENTS_SCRIPT = Path(__file__).parent.parent.parent.parent / 'scripts' / 'events.py'
+LOGS_DIR = Path(__file__).parent.parent.parent.parent / 'logs'
 
 def require_api_key(f):
     @wraps(f)
@@ -233,4 +234,25 @@ def deduplicate_events():
         require_exact_time=data.get('require_exact_time', False)
     )
     
-    return jsonify(result) 
+    return jsonify(result)
+
+@api_bp.route('/logs/events', methods=['GET'])
+@require_api_key
+def get_events_log():
+    """
+    Download the events.log file.
+    
+    Returns:
+        The events.log file as an attachment
+    """
+    log_file = LOGS_DIR / 'events.log'
+    
+    if not log_file.exists():
+        return jsonify({'error': 'Log file not found'}), 404
+        
+    return send_file(
+        log_file,
+        mimetype='text/plain',
+        as_attachment=True,
+        download_name='events.log'
+    ) 
