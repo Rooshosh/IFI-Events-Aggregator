@@ -71,8 +71,8 @@ class PeoplyScraper(BaseScraper):
                         start_time=datetime.fromisoformat(api_event['startDate'].replace('Z', '+00:00')),
                         end_time=(
                             datetime.fromisoformat(api_event['endDate'].replace('Z', '+00:00'))
-                            if api_event['endDate']
-                            else datetime.fromisoformat(api_event['startDate'].replace('Z', '+00:00'))
+                            if api_event.get('endDate')
+                            else None
                         ),
                         location=api_event['locationName'],
                         source_url=f"https://peoply.app/events/{api_event['urlId']}",

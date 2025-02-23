@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
 
 """
-IFI Events Management Tool
+This script provides a command-line interface for managing events in the IFI Events.
 
-This script provides a command-line interface for managing events in the IFI Events Aggregator.
-It handles:
+This script handles:
 - Fetching events from different sources (Navet, Peoply, Facebook)
 - Caching of raw API/web responses (to minimize calls to sources)
 - Parsing events into our format
@@ -503,6 +502,10 @@ def main():
     # Add fetch operation separator for fetch commands
     if args.command == 'fetch':
         log_separator('fetch')
+    
+    # Initialize database for commands that need it
+    if args.command in ['show', 'list', 'deduplicate'] or (args.command == 'fetch' and not args.no_store):
+        init_db()
     
     # Handle source-independent commands first
     if args.command == 'show':
