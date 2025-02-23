@@ -503,6 +503,10 @@ def main():
     if args.command == 'fetch':
         log_separator('fetch')
     
+    # Initialize database for commands that need it
+    if args.command in ['show', 'list', 'deduplicate'] or (args.command == 'fetch' and not args.no_store):
+        init_db()
+    
     # Handle source-independent commands first
     if args.command == 'show':
         if args.event_id is None:
