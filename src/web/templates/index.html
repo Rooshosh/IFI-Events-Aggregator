@@ -443,38 +443,79 @@
     // Store current view
     let currentView = 'list';
 
-    function formatRelativeTime(dateStr) {
+    function formatTimeUntil(dateStr, compact = false) {
         const eventTime = new Date(dateStr);
         const now = new Date();
+        
+        // Helper function to get day difference ignoring time
+        function getDayDifference(date1, date2) {
+            const d1 = new Date(date1.getFullYear(), date1.getMonth(), date1.getDate());
+            const d2 = new Date(date2.getFullYear(), date2.getMonth(), date2.getDate());
+            return Math.floor((d2 - d1) / (1000 * 60 * 60 * 24));
+        }
+
+        // Format time helper
+        function formatTime(date) {
+            return date.toLocaleString('en-US', { 
+                hour: 'numeric', 
+                minute: '2-digit',
+                hour12: true 
+            }).toLowerCase();
+        }
+
+        // Get the difference in days (ignoring time)
+        const dayDiff = getDayDifference(now, eventTime);
+        
+        // Get the difference in minutes for "today" calculations
         const diffMs = eventTime - now;
-        const diffDays = diffMs / (1000 * 60 * 60 * 24);
-        const diffHours = Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+        const diffMinutes = Math.floor(diffMs / (1000 * 60));
+        const diffHours = Math.floor(diffMinutes / 60);
         
-        let longFormat, shortFormat;
-        
-        if (diffDays > 0) {
-            // Special case for tomorrow (between 1 and 2 days)
-            if (diffDays >= 1 && diffDays < 2) {
-                longFormat = 'tomorrow';
-                shortFormat = 'tmrw';
-            } else {
-                // Round up for days
-                const roundedDays = Math.ceil(diffDays);
-                longFormat = `in ${roundedDays} day${roundedDays > 1 ? 's' : ''}`;
-                shortFormat = `in ${roundedDays}d`;
-            }
-        } else if (diffHours > 0) {
-            longFormat = `in ${diffHours} hour${diffHours > 1 ? 's' : ''}`;
-            shortFormat = `in ${diffHours}h`;
-        } else if (diffMs > 0) {
-            longFormat = 'starting soon';
-            shortFormat = 'soon';
-        } else {
-            longFormat = 'ongoing';
-            shortFormat = 'now';
+        // If event is in the past
+        if (diffMs < 0) {
+            return compact ? 'now' : 'ongoing';
         }
         
-        return `<span class="time-long">${longFormat}</span><span class="time-short">${shortFormat}</span>`;
+        // If event is today
+        if (dayDiff === 0) {
+            if (diffMinutes < 60) {
+                return compact ? `${diffMinutes}m` : `in ${diffMinutes} minute${diffMinutes !== 1 ? 's' : ''}`;
+            } else {
+                return compact ? `${diffHours}h` : `in ${diffHours} hour${diffHours !== 1 ? 's' : ''}`;
+            }
+        }
+        
+        // If event is tomorrow
+        if (dayDiff === 1) {
+            const time = formatTime(eventTime);
+            return compact ? `Tmr ${time}` : `Tomorrow at ${time}`;
+        }
+        
+        // If event is within a week (2-6 days)
+        if (dayDiff >= 2 && dayDiff <= 6) {
+            const weekday = eventTime.toLocaleDateString('en-US', { weekday: compact ? 'short' : 'long' });
+            const time = formatTime(eventTime);
+            return compact ? `${weekday} ${time}` : `${weekday} at ${time}`;
+        }
+        
+        // If event is a month or more away
+        if (dayDiff >= 30) {
+            const months = Math.floor(dayDiff / 30);
+            return compact ? `in ${months}mo` : `in ${months} month${months !== 1 ? 's' : ''}`;
+        }
+        
+        // If event is 14-29 days away, show in weeks
+        if (dayDiff >= 14) {
+            const weeks = Math.floor(dayDiff / 7);
+            return compact ? `in ${weeks}w` : `in ${weeks} week${weeks !== 1 ? 's' : ''}`;
+        }
+        
+        // If event is 7-13 days away
+        return compact ? `in ${dayDiff}d` : `in ${dayDiff} day${dayDiff !== 1 ? 's' : ''}`;
+    }
+
+    function formatRelativeTime(dateStr) {
+        return `<span class="time-long">${formatTimeUntil(dateStr, false)}</span><span class="time-short">${formatTimeUntil(dateStr, true)}</span>`;
     }
 
     function escapeHtml(unsafe) {
@@ -543,7 +584,7 @@
                         
                         <div class="mb-3">
                             <div class="event-time">
-                                <span data-event-time="${event.start}">${formatRelativeTime(event.start)}</span>
+                                <span data-event-time="${event.start}">${formatTimeUntil(event.start, false)}</span>
                             </div>
                             
                             <div class="event-duration">
