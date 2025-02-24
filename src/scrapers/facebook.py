@@ -47,8 +47,8 @@ class FacebookGroupScraper(BaseScraper):
         
         self.cache_config = cache_config or CacheConfig()
         self.cache_manager = CacheManager(self.cache_config.cache_dir)
-        self.max_poll_attempts = 20  # Up to ~11.5 minutes total (90s + 19*30s)
-        self.poll_interval = 30  # seconds
+        self.max_poll_attempts = 60  # Up to 1 hour total (60 attempts)
+        self.poll_interval = 60  # seconds (1 minute)
         self.initial_wait = 90  # seconds
         
         # Initialize OpenAI client (without caching)

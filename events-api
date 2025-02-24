@@ -45,6 +45,7 @@ show_usage() {
     echo "  show <id|r|n>                          Show specific event (id, random, or next)"
     echo "  deduplicate [source]                    Deduplicate events in database"
     echo "  logs                                    Download the events log file"
+    echo "  db                                      Download the events database file"
     echo ""
     echo "Examples:"
     echo "  $0 local fetch peoply --live            Fetch Peoply events locally"
@@ -52,6 +53,7 @@ show_usage() {
     echo "  $0 local clear all                      Clear all events locally"
     echo "  $0 prod show n                          Show next event in production"
     echo "  $0 local logs                           Download events log file"
+    echo "  $0 local db                             Download events database file"
     echo ""
     echo "Note: Make sure to set the API_KEY environment variable or have it in your .env file"
     exit 1
@@ -146,6 +148,22 @@ case $COMMAND in
             --output "$OUTPUT_FILE"
             
         echo "Log file downloaded as $OUTPUT_FILE"
+        ;;
+        
+    "db")
+        # Create downloaded_db directory if it doesn't exist
+        mkdir -p downloaded_db
+        
+        # Generate timestamp for the filename
+        TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
+        OUTPUT_FILE="downloaded_db/events_${TIMESTAMP}.db"
+        
+        # Download the events database file
+        curl "$BASE_URL/api/db/events" \
+            "${HEADERS[@]}" \
+            --output "$OUTPUT_FILE"
+            
+        echo "Database file downloaded as $OUTPUT_FILE"
         ;;
         
     *)
