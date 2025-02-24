@@ -8,6 +8,7 @@ from typing import Optional, Dict, Any
 import io
 from functools import wraps
 from contextlib import contextmanager
+from logging.handlers import RotatingFileHandler
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -18,6 +19,36 @@ api_bp = Blueprint('api', __name__, url_prefix='/api')
 # Path to the events.py script
 EVENTS_SCRIPT = Path(__file__).parent.parent.parent.parent / 'scripts' / 'events.py'
 LOGS_DIR = Path(__file__).parent.parent.parent.parent / 'logs'
+
+# Create logs directory if it doesn't exist
+LOGS_DIR.mkdir(exist_ok=True)
+log_file = LOGS_DIR / 'events.log'
+
+# Configure logging to both file and console
+handlers = []
+
+# Always add console handler when LOG_TO_STDOUT is set
+if os.environ.get('LOG_TO_STDOUT'):
+    handlers.append(logging.StreamHandler(sys.stdout))
+else:
+    # In normal operation, use both file and console handlers
+    handlers.extend([
+        # Console handler
+        logging.StreamHandler(),
+        # File handler with rotation (keep 30 days of logs, max 10MB per file)
+        RotatingFileHandler(
+            log_file,
+            maxBytes=10*1024*1024,  # 10MB
+            backupCount=30,
+            encoding='utf-8'
+        )
+    ])
+
+logging.basicConfig(
+    format='%(message)s' if os.environ.get('LOG_TO_STDOUT') else '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=logging.INFO,
+    handlers=handlers
+)
 
 def require_api_key(f):
     @wraps(f)
@@ -80,7 +111,11 @@ def run_events_command(command: str, *args, **kwargs) -> Dict[str, Any]:
         # Set environment variables to control logging
         env = os.environ.copy()
         env['PYTHONUNBUFFERED'] = '1'  # Ensure Python output is not buffered
-        env['LOG_TO_STDOUT'] = '1'     # Custom flag to make script log to stdout
+        # Remove LOG_TO_STDOUT to ensure full logging output
+        env.pop('LOG_TO_STDOUT', None)
+        
+        # Log the command being executed
+        logger.info(f"Executing command: {' '.join(cmd)}")
         
         # Run the command with the modified environment
         result = subprocess.run(
@@ -95,8 +130,14 @@ def run_events_command(command: str, *args, **kwargs) -> Dict[str, Any]:
         output = []
         if result.stdout.strip():
             output.append(result.stdout.strip())
+            # Split and log each line to preserve formatting
+            for line in result.stdout.strip().split('\n'):
+                logger.info(line)
         if result.stderr.strip():
             output.append(result.stderr.strip())
+            # Split and log each line to preserve formatting
+            for line in result.stderr.strip().split('\n'):
+                logger.warning(line)
             
         return {
             'status': 'success',
@@ -109,18 +150,25 @@ def run_events_command(command: str, *args, **kwargs) -> Dict[str, Any]:
         output = []
         if e.stdout.strip():
             output.append(e.stdout.strip())
+            # Split and log each line to preserve formatting
+            for line in e.stdout.strip().split('\n'):
+                logger.error(line)
         if e.stderr.strip():
             output.append(e.stderr.strip())
+            # Split and log each line to preserve formatting
+            for line in e.stderr.strip().split('\n'):
+                logger.error(line)
         return {
             'status': 'error',
             'error': '\n'.join(output),
             'command': ' '.join(cmd)
         }
     except Exception as e:
-        logger.error(f"Unexpected error: {e}")
+        error_msg = f"Unexpected error: {e}"
+        logger.error(error_msg)
         return {
             'status': 'error',
-            'error': str(e),
+            'error': error_msg,
             'command': ' '.join(cmd)
         }
 
@@ -135,7 +183,7 @@ def fetch_events():
         live: Force live data fetch (default: False)
         no_store: Don't store in database (default: False)
         detailed: Show detailed information (default: False)
-        quiet: Reduce output verbosity (default: True)
+        quiet: Reduce output verbosity (default: False)
         snapshot_id: Use existing snapshot ID for Facebook (optional)
         debug: Show debug information (default: False)
     """
@@ -148,7 +196,7 @@ def fetch_events():
         live=data.get('live', False),
         no_store=data.get('no_store', False),
         detailed=data.get('detailed', False),
-        quiet=data.get('quiet', True),
+        quiet=data.get('quiet', False),
         snapshot_id=data.get('snapshot_id'),
         debug=data.get('debug', False)
     )
@@ -184,7 +232,7 @@ def clear_events():
     
     Query Parameters:
         source: Source to clear (default: 'all')
-        quiet: Reduce output verbosity (default: True)
+        quiet: Reduce output verbosity (default: False)
     """
     data = request.get_json() or {}
     source = data.get('source', 'all')
@@ -192,7 +240,7 @@ def clear_events():
     result = run_events_command(
         'clear',
         source,
-        quiet=data.get('quiet', True)
+        quiet=data.get('quiet', False)
     )
     
     return jsonify(result)
