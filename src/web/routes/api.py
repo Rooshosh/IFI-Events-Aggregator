@@ -255,4 +255,25 @@ def get_events_log():
         mimetype='text/plain',
         as_attachment=True,
         download_name='events.log'
+    )
+
+@api_bp.route('/db/events', methods=['GET'])
+@require_api_key
+def get_events_db():
+    """
+    Download the events database file.
+    
+    Returns:
+        The events.db file as an attachment
+    """
+    db_file = Path(__file__).parent.parent.parent.parent / 'data' / 'events.db'
+    
+    if not db_file.exists():
+        return jsonify({'error': 'Database file not found'}), 404
+        
+    return send_file(
+        db_file,
+        mimetype='application/x-sqlite3',
+        as_attachment=True,
+        download_name='events.db'
     ) 
